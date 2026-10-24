@@ -1,0 +1,17 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/actions.js"}}" defer></script>{{end}}
+{{define "main"}}
+<section class="page-head">
+<div>
+<p class="eyebrow">Retro</p>
+<h1>Open actions</h1>
+<p class="lead">Everything the team agreed to do and has not finished yet, across all retros.</p>
+</div>
+</section>
+{{if .Data}}<ul class="open-actions card" role="list">
+{{range .Data}}<li class="oa" id="oa-{{.ID}}">
+<label class="oa-check"><input type="checkbox" data-action="{{.ID}}"><span class="sr-only">Mark as done</span></label>
+<div class="oa-body"><p class="oa-text">{{.Body}}</p>
+<p class="oa-meta">{{if .Owner}}<span class="oa-owner"><span class="avatar" aria-hidden="true">{{initials .Owner}}</span>{{.Owner}}</span>{{else}}<span class="oa-owner muted">No owner</span>{{end}}<a href="/retro/{{.RetroID}}">{{if .Retro}}{{.Retro}}, {{end}}{{.From}}</a></p></div>
+</li>{{end}}
+</ul>{{else}}<p class="empty">No open actions. Nice work.</p>{{end}}
+{{end}}

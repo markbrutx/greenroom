@@ -1,0 +1,143 @@
+warmups = [
+  "Describe the last two weeks in one word.",
+  "Rate this sprint from 1 to 10. What would make it one point higher?",
+  "What was the best moment of this sprint?",
+  "Which emoji sums up your week?",
+  "What is something you learned recently, at work or outside it?",
+  "Who on the team made your week easier, and how?",
+  "If this sprint were a weather forecast, what would it be?",
+  "What small win are you quietly proud of?",
+  "What took longer than you expected?",
+  "What surprised you this sprint?",
+  "If this sprint were a movie, what genre would it be?",
+  "How full is your battery right now, from 0 to 100?",
+  "What is one thing you would tell yourself at the start of the sprint?",
+  "Which task did you enjoy most?",
+  "What is a tool, shortcut or trick you started using recently?",
+  "What would you do with a completely free afternoon tomorrow?",
+  "Pick a song title that matches this sprint.",
+  "What is one thing that made you smile this week?",
+  "If our team had a mascot, what would it be?",
+  "Which meeting would you happily turn into an email?",
+  "What is a skill you would like to pick up this year?",
+  "Coffee, tea or something else? What fuelled this sprint?",
+  "What did you finish that you thought you never would?",
+  "Name one thing you want to keep exactly as it is.",
+  "What is the most useful question someone asked you lately?",
+  "If you could automate one part of your work, what would it be?",
+  "What is your favourite snack for a long afternoon?",
+  "Which part of our product do you think is underrated?",
+  "Describe the sprint as a dish. What are the ingredients?",
+  "What would a newcomer find most confusing about how we work?",
+  "Share one thing you are looking forward to next sprint.",
+  "What is a book, podcast or video that gave you an idea recently?",
+  "If you swapped roles with a teammate for a day, whose role would you pick?",
+  "What was the hardest decision you made this sprint?",
+  "What is a habit that helps you focus?",
+  "On a scale from calm sea to storm, how was this sprint?",
+  "What is one thing you would like more help with?",
+  "Which bug or problem was the most fun to solve?",
+  "If this sprint had a theme song, what would it be?",
+  "What did you stop doing that made life easier?",
+  "What is the best piece of feedback you received lately?",
+  "Pick an animal that matches your energy today.",
+  "What is something you wish you had known a month ago?",
+  "What made you curious this week?",
+  "Share a photo-worthy moment from the last two weeks, in words.",
+  "If we had a team motto for this sprint, what would it be?",
+  "What is one assumption we made that turned out to be wrong?",
+  "What do you want to celebrate today?",
+  "Which part of your work felt like flow this sprint?",
+  "What would you like to try that we have never tried?",
+  "If this sprint were a board game, which one would it be?",
+  "What is a small thing that would improve your work day?",
+  "Who outside the team helped us this sprint?",
+  "What is a word you would ban from our meetings, just for fun?",
+  "Which task was more fun than it looked?",
+  "If you could have a superpower at work, what would it be?",
+  "What did a customer or user teach us recently?",
+  "What is your favourite place to think through a hard problem?",
+  "How would you describe our team to a friend in one sentence?",
+  "What is one thing you did for your future self this sprint?",
+  "What was the most satisfying thing you deleted, closed or cleaned up?",
+  "If the next sprint went perfectly, what would be different?",
+  "What is something that went better than last time?",
+  "Name a small ritual that keeps you going during the week.",
+  "Which question are you still thinking about from this sprint?",
+]
+
+[[sets]]
+name = "Start, Stop, Continue"
+columns = ["Start", "Stop", "Continue"]
+
+[[sets]]
+name = "Went well, Didn't, Ideas"
+columns = ["What went well", "What didn't", "Ideas"]
+
+[[sets]]
+name = "Mad, Sad, Glad"
+columns = ["Mad", "Sad", "Glad"]
+
+[[sets]]
+name = "4Ls"
+columns = ["Liked", "Learned", "Lacked", "Longed for"]
+
+[[sets]]
+name = "Sailboat"
+columns = ["Wind: what pushed us", "Anchors: what held us back", "Rocks: risks ahead", "Island: where we head"]
+
+[[sets]]
+name = "KALM"
+columns = ["Keep", "Add", "Less", "More"]
+
+[[sets]]
+name = "Starfish"
+columns = ["Keep doing", "More of", "Less of", "Start doing", "Stop doing"]
+
+[[sets]]
+name = "DAKI"
+columns = ["Drop", "Add", "Keep", "Improve"]
+
+[[sets]]
+name = "Hot-air balloon"
+columns = ["Hot air: what lifts us", "Sandbags: what weighs us down", "Storms: risks ahead", "Sunny skies: what is going well"]
+
+[[sets]]
+name = "Rose, Thorn, Bud"
+columns = ["Rose: what bloomed", "Thorn: what hurt", "Bud: what could grow"]
+
+[[sets]]
+name = "Plus, Delta"
+columns = ["Plus: keep this", "Delta: change this"]
+
+[[sets]]
+name = "Speedboat"
+columns = ["Engines: what drives us", "Anchors: what slows us", "Ideas to go faster"]
+
+[[sets]]
+name = "Three little pigs"
+columns = ["House of straw: fragile", "House of sticks: could be stronger", "House of bricks: solid"]
+
+[[sets]]
+name = "Kudos, Learned, Puzzled"
+columns = ["Kudos", "Learned", "Puzzled"]
+
+[[sets]]
+name = "Highs, Lows, Surprises"
+columns = ["Highs", "Lows", "Surprises"]
+
+[[sets]]
+name = "Energizers, Drainers"
+columns = ["Energized us", "Drained us", "Ideas"]
+
+[[sets]]
+name = "Hopes and concerns"
+columns = ["Hopes", "Concerns", "Questions"]
+
+[[sets]]
+name = "More, Less, Same"
+columns = ["More", "Less", "Same"]
+
+[[sets]]
+name = "Proud, Surprised, Worried"
+columns = ["Proud of", "Surprised by", "Worried about"]
