@@ -1,0 +1,7 @@
+.git
+.scratch
+dist
+bin
+*.db*
+.env
+docs/img

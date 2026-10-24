@@ -1,0 +1,7 @@
+retro.example.internal {
+	tls /etc/caddy/certs/retro.crt /etc/caddy/certs/retro.key
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080 {
+		flush_interval -1
+	}
+}
