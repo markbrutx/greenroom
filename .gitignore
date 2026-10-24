@@ -1,0 +1,7 @@
+.scratch/
+/greenroom
+/dist/
+*.db
+*.db-shm
+*.db-wal
+.env
