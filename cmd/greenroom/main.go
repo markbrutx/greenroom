@@ -1,0 +1,253 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"runtime/debug"
+	"strings"
+	"syscall"
+	"time"
+	_ "time/tzdata"
+
+	"github.com/markbrutx/greenroom/internal/auth"
+	"github.com/markbrutx/greenroom/internal/config"
+	"github.com/markbrutx/greenroom/internal/live"
+	"github.com/markbrutx/greenroom/internal/retro"
+	"github.com/markbrutx/greenroom/internal/store"
+	"github.com/markbrutx/greenroom/internal/web"
+)
+
+var version = "dev"
+
+const usage = `Greenroom: small self-hosted tools for teams.
+
+Usage:
+  greenroom [serve]        start the server
+  greenroom hash           read a password from stdin, print its argon2id hash
+  greenroom backup FILE    write a consistent copy of the SQLite database to FILE
+  greenroom health         exit 0 when the local server answers /healthz
+  greenroom version        print the version
+
+Configuration comes from GREENROOM_* environment variables; see README.md.
+`
+
+func main() {
+	cmd := "serve"
+	if len(os.Args) > 1 {
+		cmd = os.Args[1]
+	}
+	var err error
+	switch cmd {
+	case "serve":
+		err = serve()
+	case "hash":
+		err = hash(os.Stdin, os.Stdout)
+	case "backup":
+		if len(os.Args) != 3 {
+			err = errors.New("usage: greenroom backup FILE")
+		} else {
+			err = backup(os.Args[2])
+		}
+	case "health":
+		err = health()
+	case "version", "--version", "-v":
+		fmt.Println("greenroom", fullVersion())
+	case "help", "--help", "-h":
+		fmt.Print(usage)
+	default:
+		fmt.Fprint(os.Stderr, usage)
+		err = fmt.Errorf("unknown command %q", cmd)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "greenroom:", err)
+		os.Exit(1)
+	}
+}
+
+func fullVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range info.Settings {
+			if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+				return "dev-" + s.Value[:7]
+			}
+		}
+	}
+	return version
+}
+
+func hash(in io.Reader, out io.Writer) error {
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	pw := strings.TrimRight(line, "\r\n")
+	if len(pw) < 8 {
+		return errors.New("the password must be at least 8 characters")
+	}
+	h, err := auth.HashPassword(pw)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(out, h)
+	return err
+}
+
+func backup(file string) error {
+	url := os.Getenv("GREENROOM_DATABASE_URL")
+	if url == "" {
+		url = "sqlite:greenroom.db"
+	}
+	if _, err := os.Stat(file); err == nil {
+		return fmt.Errorf("%s already exists; pick a new file name", file)
+	}
+	ctx := context.Background()
+	db, err := store.Open(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := db.Backup(ctx, file); err != nil {
+		return err
+	}
+	fmt.Println("backup written to", file)
+	return nil
+}
+
+func health() error {
+	addr := os.Getenv("GREENROOM_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	scheme := "http"
+	client := &http.Client{Timeout: 3 * time.Second}
+	if os.Getenv("GREENROOM_TLS_CERT") != "" {
+		scheme = "https"
+		client.Transport = insecureLocalTransport()
+	}
+	resp, err := client.Get(scheme + "://" + net.JoinHostPort(host, port) + "/healthz")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthz answered %s", resp.Status)
+	}
+	return nil
+}
+
+func newLogger(cfg *config.Config) *slog.Logger {
+	level := slog.LevelInfo
+	switch cfg.LogLevel {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	if cfg.LogFormat == "json" {
+		return slog.New(slog.NewJSONHandler(os.Stderr, opts))
+	}
+	return slog.New(slog.NewTextHandler(os.Stderr, opts))
+}
+
+func serve() error {
+	cfg, err := config.FromEnv()
+	if err != nil {
+		return err
+	}
+	log := newLogger(cfg)
+	slog.SetDefault(log)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	db, err := store.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if cfg.AuthMode == config.AuthOpen {
+		log.Warn("GREENROOM_AUTH=open: there is no password, anyone who can reach this server can sign in under any name. Use it only on a closed network.")
+	}
+	if cfg.AuthMode == config.AuthPassword && !auth.ValidHash(cfg.PasswordHash) {
+		return errors.New("GREENROOM_PASSWORD_HASH is not an argon2id hash; create one with: greenroom hash")
+	}
+
+	a, err := auth.New(ctx, cfg, db, log)
+	if err != nil {
+		return err
+	}
+	hub := live.NewHub()
+	app, err := web.New(cfg, db, hub, a, log)
+	if err != nil {
+		return err
+	}
+	pool, err := retro.LoadPool(cfg.Templates)
+	if err != nil {
+		return err
+	}
+	if err := app.Register(retro.New(pool)); err != nil {
+		return err
+	}
+
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           app.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
+		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
+	}
+	srv.RegisterOnShutdown(hub.Close)
+
+	ln, err := net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		return err
+	}
+	errc := make(chan error, 1)
+	go func() {
+		if cfg.TLSCert != "" {
+			errc <- srv.ServeTLS(ln, cfg.TLSCert, cfg.TLSKey)
+		} else {
+			errc <- srv.Serve(ln)
+		}
+	}()
+	log.Info("greenroom started", "version", fullVersion(), "addr", ln.Addr().String(), "db", string(db.Dialect),
+		"auth", cfg.AuthMode, "tls", cfg.TLSCert != "")
+
+	select {
+	case err := <-errc:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+	case <-ctx.Done():
+	}
+	log.Info("shutting down")
+	sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(sctx); err != nil {
+		log.Warn("shutdown", "err", err)
+	}
+	return nil
+}

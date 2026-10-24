@@ -1,0 +1,15 @@
+{{define "bodyclass"}}page-login{{end}}
+{{define "main"}}
+<form class="login card" method="post" action="/login">
+<img class="login-logo" src="/brand/logo?v={{.Brand.Version}}" alt="" width="56" height="56">
+<h1>Sign in to {{.Brand.Name}}</h1>
+<input type="hidden" name="next" value="{{.Data.Next}}">
+<label class="field"><span>{{if .Data.AllowList}}Name{{else}}Your name{{end}}</span>
+<input name="name" autocomplete="username" autocapitalize="words" maxlength="40" value="{{.Data.Name}}" {{if not .Data.Name}}autofocus {{end}}required></label>
+{{if .Data.Password}}<label class="field"><span>Team password</span>
+<input type="password" name="password" autocomplete="current-password" {{if .Data.Name}}autofocus {{end}}required></label>{{end}}
+{{with .Data.Err}}<p class="form-error" role="alert">{{.}}</p>{{end}}
+<button class="btn btn-primary btn-block" type="submit">Sign in</button>
+{{if not .Data.Password}}<p class="hint">This space has no password. Anyone on this network can join under any name.</p>{{end}}
+</form>
+{{end}}
