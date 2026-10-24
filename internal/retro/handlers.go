@@ -183,7 +183,7 @@ func (t *Tool) load(r *http.Request, id int64) (*State, error) {
 }
 
 func timerLeft(end int64) (bool, int64) {
-	if end == 0 {
+	if end == 0 || store.Now()-end > timerShownAfterEnd.Milliseconds() {
 		return false, 0
 	}
 	left := end - store.Now()

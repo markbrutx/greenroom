@@ -217,6 +217,9 @@ func TestTimerHiddenTitleColumns(t *testing.T) {
 	if on, left := timerLeft(store.Now() - 5000); !on || left != 0 {
 		t.Fatalf("finished timer: %v %d", on, left)
 	}
+	if on, _ := timerLeft(store.Now() - 11*60*1000); on {
+		t.Fatal("a timer that ended long ago is no longer shown")
+	}
 	if err := r.SetHidden(ctx, id+99, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("hidden on missing retro: %v", err)
 	}

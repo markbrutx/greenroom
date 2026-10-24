@@ -35,6 +35,8 @@ const (
 	maxColumns = 6
 	maxTimer   = 60
 	listLimit  = 300
+
+	timerShownAfterEnd = 10 * time.Minute
 )
 
 var Emojis = []string{"👍", "❤️", "😂", "🎉", "🤔", "😮"}
