@@ -145,6 +145,6 @@ func brandCSS(accent string) string {
 		onDark = white
 	}
 	return fmt.Sprintf(`:root{--accent:%s;--accent-ink:%s;--on-accent:%s}
-:root[data-theme="dark"]{--accent:%s;--accent-ink:%s;--on-accent:%s}
+@media (prefers-color-scheme: dark){:root{--accent:%s;--accent-ink:%s;--on-accent:%s}}
 `, base.hex(), textLight.hex(), onLight.hex(), dark.hex(), dark.hex(), onDark.hex())
 }

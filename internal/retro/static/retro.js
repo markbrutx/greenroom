@@ -5,9 +5,7 @@
   const me = S.me;
   const rid = S.id;
   const EMOJI = S.emojis;
-  const THUMB = EMOJI[0];
   const EVERYONE = 'Everyone';
-  const SORT_KEY = 'greenroom-retro-sort';
 
   const $ = (sel, root) => (root || document).querySelector(sel);
   const tplCard = $('#tpl-card').content.firstElementChild;
@@ -19,17 +17,11 @@
   const pending = new Map();
   const boundTmps = new Set();
   let cols = [];
-  let hidden = false;
-  let sortOn = readSort();
   let openEl = null;
   let people = (S.names || []).slice();
   let here = [];
   let toastTimer = 0;
   const fieldSizing = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('field-sizing', 'content');
-
-  function readSort() {
-    try { return localStorage.getItem(SORT_KEY) === '1'; } catch (e) { return false; }
-  }
 
   function toast(text) {
     const t = $('#toast');
@@ -86,25 +78,20 @@
     return list.sort((a, b) => a.localeCompare(b));
   }
 
+  function option(value, text) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    return o;
+  }
+
   function ownerOptions(sel, current) {
     const list = peopleList();
     const key = list.join('\n');
     if (current && current !== EVERYONE && !list.includes(current)) list.push(current);
-    sel.replaceChildren();
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = 'Owner';
-    sel.append(blank);
-    list.forEach((n) => {
-      const o = document.createElement('option');
-      o.value = n;
-      o.textContent = n;
-      sel.append(o);
-    });
-    const all = document.createElement('option');
-    all.value = EVERYONE;
-    all.textContent = EVERYONE;
-    sel.append(all);
+    sel.replaceChildren(option('', 'Who?'));
+    list.forEach((n) => sel.append(option(n, n)));
+    sel.append(option(EVERYONE, EVERYONE));
     sel.value = current || '';
     sel.dataset.people = key;
   }
@@ -119,7 +106,6 @@
     el._typed = false;
     el._timer = 0;
     el._inflight = 0;
-    el.classList.add('col-' + c.col);
     ta.value = el._c.body;
     if (c.col === 'a') {
       sel.hidden = false;
@@ -131,7 +117,6 @@
         if (el._c.id) api({ op: 'owner', id: el._c.id, text: sel.value }).catch(() => {});
       });
     }
-    ta.placeholder = c.col === 'w' ? 'Your answer' : c.col === 'a' ? 'What will we do?' : 'Write a card';
     ta.addEventListener('focus', () => enter(el));
     ta.addEventListener('input', () => {
       grow(ta);
@@ -179,19 +164,16 @@
       if (sel.dataset.people !== peopleList().join('\n') || sel.value !== c.owner) ownerOptions(sel, c.owner);
     }
     renderLock(el);
-    renderVeil(el);
     renderReacts(el);
   }
 
   function renderLock(el) {
     const c = el._c;
-    const ta = el._ta;
-    const lockmsg = $('.lockmsg', el);
     clearTimeout(el._lockT);
     const other = c.lock && c.lock !== me;
     el.classList.toggle('locked', !!other);
-    lockmsg.textContent = other ? c.lock + ' is typing' : '';
-    ta.readOnly = !!other || el.classList.contains('veiled');
+    $('.lockmsg', el).textContent = other ? c.lock + ' is typing' : '';
+    el._ta.readOnly = !!other;
     if (other) {
       el._lockT = setTimeout(() => {
         c.lock = '';
@@ -200,18 +182,9 @@
     }
   }
 
-  function renderVeil(el) {
-    const veiled = hidden && isBoardCol(el._c.col) && el._c.author !== me;
-    el.classList.toggle('veiled', veiled);
-    el.inert = veiled;
-    el._ta.readOnly = veiled || el.classList.contains('locked');
-    if (veiled && openEl === el) openEl = null;
-  }
-
   function renderReacts(el) {
     const box = $('.reacts', el);
-    const add = $('.react-add', box);
-    box.querySelectorAll('.chip').forEach((x) => x.remove());
+    box.replaceChildren();
     const r = el._c.r || {};
     EMOJI.forEach((e) => {
       const who = r[e] || [];
@@ -223,17 +196,11 @@
       b.dataset.emoji = e;
       b.setAttribute('aria-pressed', mine ? 'true' : 'false');
       b.title = who.join(', ');
-      b.setAttribute('aria-label', e + ' ' + who.length + ': ' + who.join(', '));
-      const em = document.createElement('span');
-      em.className = 'em';
-      em.textContent = e;
-      const n = document.createElement('span');
-      n.className = 'n';
-      n.textContent = String(who.length);
-      b.append(em, n);
-      box.insertBefore(b, add);
+      b.textContent = e + ' ' + who.length;
+      box.append(b);
     });
-    add.disabled = !el._c.id;
+    box.hidden = !box.childElementCount;
+    $('.react-add', el).disabled = !el._c.id;
   }
 
   function setReact(c, emoji, who, on) {
@@ -249,7 +216,6 @@
     if (!el._c.id) return;
     setReact(el._c, emoji, me, on);
     renderReacts(el);
-    sortBox(el.parentElement);
     const id = el._c.id;
     el._chain = (el._chain || Promise.resolve())
       .then(() => api({ op: 'react', id, emoji, on }))
@@ -280,13 +246,11 @@
       const mine = (who[b.dataset.emoji] || []).includes(me);
       b.classList.toggle('mine', mine);
       b.setAttribute('aria-checked', mine ? 'true' : 'false');
-      b.setAttribute('aria-label', (mine ? 'Remove ' : 'React with ') + b.dataset.emoji);
     });
     picker._el = el;
     picker._anchor = anchor;
     picker.hidden = false;
     placePicker();
-    picker.classList.add('on');
     anchor.setAttribute('aria-expanded', 'true');
     const first = $('button', picker);
     if (first) first.focus({ preventScroll: true });
@@ -302,9 +266,9 @@
     }
     const pw = picker.offsetWidth;
     const ph = picker.offsetHeight;
-    const left = Math.min(Math.max(8, r.left), window.innerWidth - pw - 8);
+    const left = Math.min(Math.max(8, r.right - pw), window.innerWidth - pw - 8);
     let top = r.top - ph - 8;
-    if (top < 68) top = r.bottom + 8;
+    if (top < 64) top = r.bottom + 8;
     picker.style.left = left + 'px';
     picker.style.top = top + 'px';
   }
@@ -312,7 +276,6 @@
   function closePicker(refocus) {
     if (picker.hidden) return;
     picker.hidden = true;
-    picker.classList.remove('on');
     const a = picker._anchor;
     picker._el = null;
     picker._anchor = null;
@@ -336,8 +299,7 @@
     const i = items.indexOf(document.activeElement);
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      const n = (i + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length;
-      items[n].focus();
+      items[(i + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length].focus();
     }
   });
 
@@ -367,25 +329,21 @@
     if (openEl === el) return;
     if (openEl) leave(openEl);
     openEl = el;
-    el.classList.add('open');
   }
 
   function leave(el) {
     if (openEl === el) openEl = null;
-    el.classList.remove('open');
     const blank = !el._ta.value.trim() && !el._c.owner && !hasReactions(el._c);
     if (blank && (el._c.author === me || !el._c.id)) {
       discard(el, false);
       return;
     }
     if (el._typed || el._timer) sendText(el, true).catch(() => {});
-    sortBox(el.parentElement);
   }
 
   function discard(el, explicit) {
     if (openEl === el) openEl = null;
     if (picker._el === el) closePicker(false);
-    const box = el.parentElement;
     el.remove();
     clearTimeout(el._timer);
     el._timer = 0;
@@ -394,8 +352,7 @@
       cards.delete(el._c.id);
       api({ op: 'del', id: el._c.id }).catch(() => { if (explicit) resync(); });
     }
-    updateCounts();
-    if (box) sortBox(box);
+    diceState();
   }
 
   function addCard(col) {
@@ -407,7 +364,7 @@
     pending.set(tmp, el);
     box.append(el);
     render(el);
-    updateCounts();
+    diceState();
     el._ta.focus();
     api({ op: 'add', col, tmp })
       .then((res) => { if (res && res.c) upsert(res.c, res.tmp); })
@@ -416,7 +373,7 @@
           pending.delete(tmp);
           if (openEl === el) openEl = null;
           el.remove();
-          updateCounts();
+          diceState();
         }
       });
   }
@@ -452,7 +409,6 @@
       const r = c.r || el._c.r;
       Object.assign(el._c, { col: c.col, author: c.author, body: c.body, owner: c.owner, ver: c.ver, lock: c.lock, lockMs: c.lockMs, r });
       render(el);
-      sortBox(el.parentElement);
       return;
     }
     el = makeCard(c);
@@ -462,8 +418,6 @@
     const box = boxFor(c.col);
     if (box) box.append(el);
     render(el);
-    updateCounts();
-    if (box) sortBox(box);
   }
 
   function drop(id) {
@@ -471,47 +425,8 @@
     if (!el) return;
     if (openEl === el) openEl = null;
     if (picker._el === el) closePicker(false);
-    const box = el.parentElement;
     el.remove();
     cards.delete(id);
-    updateCounts();
-    if (box) sortBox(box);
-  }
-
-  function score(el) {
-    const r = el._c.r || {};
-    let total = 0;
-    Object.keys(r).forEach((e) => { total += r[e].length; });
-    return [(r[THUMB] || []).length, total];
-  }
-
-  function sortBox(box) {
-    if (!box || !box.classList || !box.classList.contains('cards')) return;
-    const list = [...box.children];
-    if (!sortOn) {
-      list.forEach((el) => { el.style.order = ''; });
-      return;
-    }
-    if (openEl && box.contains(openEl)) return;
-    list
-      .map((el, i) => ({ el, i, s: score(el) }))
-      .sort((a, b) => b.s[0] - a.s[0] || b.s[1] - a.s[1] || a.i - b.i)
-      .forEach((x, rank) => { x.el.style.order = String(rank); });
-  }
-
-  function sortAll() {
-    document.querySelectorAll('#board .cards').forEach(sortBox);
-  }
-
-  function updateCounts() {
-    let boardCards = 0;
-    document.querySelectorAll('#board .col').forEach((col) => {
-      const n = $('.cards', col).childElementCount;
-      if (col.id !== 'col-a') boardCards += n;
-      const label = $('.col-count', col);
-      if (label) label.textContent = n ? String(n) : '';
-    });
-    $('#set-pick').hidden = boardCards > 0;
   }
 
   function buildCols(next) {
@@ -530,7 +445,6 @@
       const d = tplCol.cloneNode(true);
       d.classList.add('board-col');
       d.id = 'col-' + i;
-      d.dataset.col = String(i);
       const inp = $('.col-title', d);
       inp.value = t;
       inp.addEventListener('change', () => {
@@ -541,7 +455,6 @@
       $('.add', d).dataset.add = String(i);
       board.insertBefore(d, actions);
     });
-    board.dataset.cols = String(next.length);
     cols = next.slice();
     for (const el of cards.values()) {
       if (isBoardCol(el._c.col)) {
@@ -549,42 +462,13 @@
         if (box) box.append(el);
       }
     }
-    sortAll();
   }
 
-  function renderSetPicker() {
-    const sel = $('#set-select');
-    if (sel.childElementCount) return;
-    const first = document.createElement('option');
-    first.value = '';
-    first.textContent = 'Change column set';
-    sel.append(first);
-    (S.sets || []).forEach((n) => {
-      const o = document.createElement('option');
-      o.value = n;
-      o.textContent = n;
-      sel.append(o);
-    });
-  }
-
-  function setHidden(on) {
-    hidden = on;
-    const b = $('#hide-toggle');
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.classList.toggle('btn-on', on);
-    $('.label', b).textContent = on ? 'Reveal cards' : 'Private writing';
-    b.title = on ? 'Show everyone\'s cards to everyone' : 'Blur other people\'s cards while everyone writes';
-    $('#private-note').hidden = !on;
-    for (const el of cards.values()) renderVeil(el);
-  }
-
-  function setSort(on) {
-    sortOn = on;
-    try { localStorage.setItem(SORT_KEY, on ? '1' : '0'); } catch (e) {}
-    const b = $('#sort-toggle');
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.classList.toggle('btn-on', on);
-    sortAll();
+  function diceState() {
+    let n = 0;
+    for (const el of cards.values()) if (isBoardCol(el._c.col)) n += 1;
+    board.querySelectorAll('.board-col .cards').forEach((box) => { n += [...box.children].filter((el) => !el._c.id).length; });
+    $('#cols-dice').disabled = n > 0;
   }
 
   function meta(m) {
@@ -594,48 +478,17 @@
       grow(q);
     }
     S.warmup = m.warmup;
-    const t = $('#title');
-    if (document.activeElement !== t) t.value = m.title || '';
-    S.title = m.title || '';
-    const crumb = document.querySelector('.crumbs [aria-current]');
-    if (crumb && S.title) crumb.textContent = S.title;
-    document.title = (S.title || 'Retro ' + S.date) + ' · ' + document.title.split(' · ').slice(-1)[0];
     buildCols(m.cols);
-    if (hidden !== !!m.hidden) setHidden(!!m.hidden);
-    updateCounts();
   }
 
   function renderHere(names) {
     here = names.slice();
-    const h = $('#here');
-    h.replaceChildren();
-    const max = 5;
-    names.slice(0, max).forEach((n) => {
-      const a = document.createElement('span');
-      a.className = 'avatar' + (n === me ? ' self' : '');
-      a.title = n;
-      a.setAttribute('role', 'img');
-      a.setAttribute('aria-label', n);
-      a.textContent = initials(n);
-      h.append(a);
-    });
-    if (names.length > max) {
-      const more = document.createElement('span');
-      more.className = 'avatar more';
-      more.title = names.slice(max).join(', ');
-      more.textContent = '+' + (names.length - max);
-      h.append(more);
-    }
+    $('#here').replaceChildren(...names.map((n) => {
+      const s = document.createElement('span');
+      s.textContent = n;
+      return s;
+    }));
     for (const el of cards.values()) if (el._c.col === 'a') render(el);
-  }
-
-  function initials(s) {
-    let x = s.trim();
-    const at = x.indexOf('@');
-    if (at > 0) x = x.slice(0, at);
-    const parts = x.split(/[\s._-]+/).filter(Boolean);
-    const out = parts.slice(0, 2).map((p) => Array.from(p)[0]).join('');
-    return (out || '?').toUpperCase();
   }
 
   function renderCarry(list) {
@@ -646,7 +499,7 @@
     list.forEach((c) => {
       const li = document.createElement('li');
       li.id = 'cy-' + c.id;
-      li.className = 'carry-item' + (c.done ? ' done' : '');
+      li.className = c.done ? 'done' : '';
       const label = document.createElement('label');
       const cb = document.createElement('input');
       cb.type = 'checkbox';
@@ -654,10 +507,10 @@
       const body = document.createElement('span');
       body.className = 'carry-body';
       body.textContent = c.body;
-      const metaEl = document.createElement('span');
-      metaEl.className = 'carry-meta';
-      metaEl.textContent = (c.owner ? c.owner + ' · ' : '') + c.from;
-      label.append(cb, body, metaEl);
+      const info = document.createElement('span');
+      info.className = 'carry-meta';
+      info.textContent = (c.owner ? c.owner + ' · ' : '') + c.from;
+      label.append(cb, body, info);
       li.append(label);
       cb.addEventListener('change', () => {
         const done = cb.checked;
@@ -673,38 +526,10 @@
     });
   }
 
-  const timer = { on: false, end: 0, tick: 0 };
-  function setTimer(on, ms) {
-    timer.on = on;
-    timer.end = performance.now() + ms;
-    clearInterval(timer.tick);
-    const pill = $('#timer-pill');
-    pill.hidden = !on;
-    pill.classList.remove('up');
-    if (!on) return;
-    const draw = () => {
-      const left = Math.max(0, timer.end - performance.now());
-      const label = $('#timer-left');
-      if (left <= 0) {
-        label.textContent = 'Time\u2019s up';
-        pill.classList.add('up');
-        pill.setAttribute('aria-label', 'Time is up');
-        clearInterval(timer.tick);
-        return;
-      }
-      const s = Math.ceil(left / 1000);
-      label.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-      pill.setAttribute('aria-label', 'Time left ' + label.textContent);
-    };
-    draw();
-    timer.tick = setInterval(draw, 250);
-  }
-
   function apply(s) {
     if (s.names) people = s.names.slice();
     renderHere(s.here || []);
     meta(s);
-    setTimer(s.timerOn, s.timerMs);
     const seen = new Set();
     s.cards.forEach((c) => {
       seen.add(c.id);
@@ -712,8 +537,7 @@
     });
     for (const id of [...cards.keys()]) if (!seen.has(id)) drop(id);
     renderCarry(s.carry || []);
-    updateCounts();
-    sortAll();
+    diceState();
   }
 
   async function resync() {
@@ -749,12 +573,6 @@
   document.addEventListener('click', (e) => {
     const add = e.target.closest('[data-add]');
     if (add) addCard(add.dataset.add);
-    const t = e.target.closest('[data-timer]');
-    if (t) {
-      const min = Number(t.dataset.timer);
-      setTimer(min > 0, min * 60000);
-      api({ op: 'timer', min }).catch(() => {});
-    }
   });
 
   const warm = $('#warmup');
@@ -768,28 +586,7 @@
     if (e.key === 'Escape') { warm.value = S.warmup; grow(warm); warm.blur(); }
   });
   $('#warmup-dice').addEventListener('click', () => api({ op: 'warmup' }).catch(() => {}));
-
-  const title = $('#title');
-  title.addEventListener('change', () => api({ op: 'title', text: title.value }).catch(() => {}));
-  title.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') title.blur();
-    if (e.key === 'Escape') { title.value = S.title; title.blur(); }
-  });
-
   $('#cols-dice').addEventListener('click', () => api({ op: 'cols' }).catch(() => {}));
-  $('#set-select').addEventListener('change', (e) => {
-    const v = e.target.value;
-    e.target.value = '';
-    if (v) api({ op: 'cols', set: v }).catch(() => {});
-  });
-
-  $('#hide-toggle').addEventListener('click', () => {
-    const next = !hidden;
-    setHidden(next);
-    api({ op: 'hidden', on: next }).catch(() => setHidden(!next));
-  });
-
-  $('#sort-toggle').addEventListener('click', () => setSort(!sortOn));
 
   $('#copy').addEventListener('click', async () => {
     const url = '/retro/' + rid + '/export.md';
@@ -820,20 +617,15 @@
     es.onmessage = (e) => {
       const m = JSON.parse(e.data);
       switch (m.t) {
-        case 'card': upsert(m.c, m.tmp); break;
-        case 'del': drop(m.id); break;
+        case 'card': upsert(m.c, m.tmp); diceState(); break;
+        case 'del': drop(m.id); diceState(); break;
         case 'meta': meta(m); break;
         case 'here': renderHere(m.names); break;
-        case 'timer':
-          setTimer(m.on, m.ms);
-          if (m.on && m.by && m.by !== me) toast(m.by + ' started a ' + Math.round(m.ms / 60000) + ' min timer.');
-          break;
         case 'react': {
           const el = cards.get(m.id);
           if (!el) break;
           setReact(el._c, m.emoji, m.who, m.on);
           renderReacts(el);
-          sortBox(el.parentElement);
           break;
         }
         case 'carry': {
@@ -849,8 +641,6 @@
     };
   }
 
-  renderSetPicker();
-  setSort(sortOn);
   apply(S);
   connect();
 })();

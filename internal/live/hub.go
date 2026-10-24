@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -45,20 +44,6 @@ func (h *Hub) Send(room string, v any) {
 	h.sendLocked(room, b)
 }
 
-func (h *Hub) SendPrefix(prefix string, v any) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for room := range h.rooms {
-		if strings.HasPrefix(room, prefix) {
-			h.sendLocked(room, b)
-		}
-	}
-}
-
 func (h *Hub) sendLocked(room string, b []byte) {
 	for s := range h.rooms[room] {
 		if s.gone {
@@ -90,16 +75,6 @@ func (h *Hub) hereLocked(room string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func (h *Hub) Online() int {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	n := 0
-	for _, subs := range h.rooms {
-		n += len(subs)
-	}
-	return n
 }
 
 func (h *Hub) presenceLocked(room string) {

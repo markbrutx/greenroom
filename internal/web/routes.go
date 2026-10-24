@@ -9,17 +9,10 @@ import (
 	"github.com/markbrutx/greenroom/internal/auth"
 )
 
-type homeTile struct {
-	ToolInfo
-	BadgeText string
-}
-
 type loginData struct {
-	Name      string
-	Next      string
-	Err       string
-	Password  bool
-	AllowList bool
+	Name string
+	Next string
+	Err  string
 }
 
 func (app *App) routes() {
@@ -49,47 +42,29 @@ func (app *App) routes() {
 }
 
 func (app *App) home(w http.ResponseWriter, r *http.Request) {
-	tiles := make([]homeTile, 0, len(app.tools))
-	for _, info := range app.tools {
-		tile := homeTile{ToolInfo: info}
-		if info.Badge != nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-			tile.BadgeText = info.Badge(ctx)
-			cancel()
-		}
-		tiles = append(tiles, tile)
+	if len(app.tools) == 0 {
+		http.Error(w, "No tools are registered.", http.StatusNotFound)
+		return
 	}
-	app.Render(w, r, app.homeT, View{Title: "Home", Data: tiles})
+	http.Redirect(w, r, "/"+app.tools[0].Slug, http.StatusSeeOther)
 }
 
 func (app *App) parsePages() error {
 	var err error
-	if app.homeT, err = app.Templates(templateFS, "templates/home.html"); err != nil {
-		return err
-	}
 	app.loginT, err = app.Templates(templateFS, "templates/login.html")
 	return err
 }
 
 func (app *App) loginPage(w http.ResponseWriter, r *http.Request) {
-	if !app.Auth.UsesLoginForm() {
-		if _, denied := app.Auth.Identify(r); denied != nil {
-			http.Error(w, denied.Reason, denied.Status)
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+	next := auth.SafeNext(r.URL.Query().Get("next"))
+	if _, ok := app.Auth.Identify(r); ok {
+		http.Redirect(w, r, next, http.StatusSeeOther)
 		return
 	}
-	if _, denied := app.Auth.Identify(r); denied == nil {
-		http.Redirect(w, r, auth.SafeNext(r.URL.Query().Get("next")), http.StatusSeeOther)
-		return
-	}
-	app.renderLogin(w, r, loginData{Next: auth.SafeNext(r.URL.Query().Get("next"))}, http.StatusOK)
+	app.renderLogin(w, r, loginData{Name: auth.LastName(r), Next: next}, http.StatusOK)
 }
 
 func (app *App) renderLogin(w http.ResponseWriter, r *http.Request, d loginData, status int) {
-	d.Password = app.Auth.NeedsPassword()
-	d.AllowList = app.Auth.HasAllowList()
 	app.RenderStatus(w, r, app.loginT, View{Title: "Sign in", Data: d}, status)
 }
 
@@ -107,7 +82,7 @@ func (app *App) login(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.As(err, &blocked):
 			status = http.StatusTooManyRequests
-		case errors.Is(err, auth.ErrNoName), errors.Is(err, auth.ErrNotOnList), errors.Is(err, auth.ErrWrongPass), errors.Is(err, auth.ErrNotLoginMode):
+		case errors.Is(err, auth.ErrNoName), errors.Is(err, auth.ErrWrongPass):
 		default:
 			app.Log.Error("login", "err", err)
 			err = errors.New("The database did not answer. Try again in a moment.")

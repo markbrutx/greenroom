@@ -1,55 +1,17 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/retro.js"}}" defer></script>{{end}}
-{{define "bodyclass"}}page-room{{end}}
-{{define "bar"}}<div class="here" id="here" aria-label="People in this retro"></div>
-<div class="timer-pill" id="timer-pill" role="timer" hidden>{{icon "clock"}}<span id="timer-left">0:00</span></div>{{end}}
+{{define "bar"}}<div class="here" id="here" aria-label="Here now"></div>
+<button class="btn btn-sm" type="button" id="copy">Copy summary</button>{{end}}
 {{define "main"}}
-<script type="application/json" id="retro-state">{{.Data.State}}</script>
-<header class="room-head">
-<div class="room-title">
-<input id="title" class="title-input" maxlength="80" placeholder="Untitled retro" aria-label="Retro title" autocomplete="off" value="{{.Data.Title}}">
-<p class="muted room-date">{{.Data.Date}}</p>
-</div>
-<div class="toolbar" role="toolbar" aria-label="Retro tools">
-<div class="seg" role="group" aria-label="Shared timer">
-<span class="seg-icon" aria-hidden="true">{{icon "clock"}}</span>
-<button type="button" data-timer="1" aria-label="Start a 1 minute timer">1m</button>
-<button type="button" data-timer="3" aria-label="Start a 3 minute timer">3m</button>
-<button type="button" data-timer="5" aria-label="Start a 5 minute timer">5m</button>
-<button type="button" data-timer="10" aria-label="Start a 10 minute timer">10m</button>
-<button type="button" data-timer="0" class="seg-stop" aria-label="Stop the timer" title="Stop the timer">{{icon "stop"}}</button>
-</div>
-<button class="btn" type="button" id="hide-toggle" aria-pressed="false"><span class="when-off">{{icon "eyeoff"}}</span><span class="when-on">{{icon "eye"}}</span><span class="label">Private writing</span></button>
-<button class="btn" type="button" id="sort-toggle" aria-pressed="false" aria-label="Sort cards by 👍">{{icon "sort"}}<span><span class="wide">Sort by </span>👍</span></button>
-<button class="btn" type="button" id="copy" aria-label="Copy the summary as Markdown">{{icon "copy"}}<span>Copy<span class="wide"> as Markdown</span></span></button>
-</div>
-</header>
-
-<section class="block" aria-labelledby="h-warmup">
-<div class="block-head"><h2 id="h-warmup">Warm-up</h2></div>
-<div class="warmup card">
-<textarea id="warmup" rows="1" maxlength="300" aria-label="Warm-up question"></textarea>
-<button class="icon-btn" type="button" id="warmup-dice" title="Another question" aria-label="Another question">{{icon "dice"}}</button>
-</div>
-<div class="col col-w" id="col-w" data-col="w"><div class="cards"></div><button class="add" type="button" data-add="w">{{icon "plus"}}<span>Answer</span></button></div>
-</section>
-
-<section class="block" id="carry-block" aria-labelledby="h-carry" hidden>
-<div class="block-head"><h2 id="h-carry">From earlier retros</h2><a class="block-link" href="/retro/actions">All open actions</a></div>
-<ul class="carry card" id="carry" role="list"></ul>
-</section>
-
-<section class="block" aria-labelledby="h-board">
-<div class="block-head"><h2 id="h-board">Board</h2>
-<div class="set-pick" id="set-pick" hidden><select id="set-select" class="input" aria-label="Column set"></select><button class="icon-btn" type="button" id="cols-dice" title="Random column set" aria-label="Random column set">{{icon "dice"}}</button></div>
-</div>
-<p class="private-note" id="private-note" hidden>{{icon "lock"}}<span>Private writing is on. Cards from other people stay blurred until someone reveals them.</span></p>
+<script type="application/json" id="retro-state">{{.Data}}</script>
+<h2 class="block-head">Warm-up</h2>
+<div class="warmup"><textarea id="warmup" rows="1" maxlength="300" aria-label="Warm-up question"></textarea><button class="icon-btn" type="button" id="warmup-dice" title="Another question" aria-label="Another question">{{icon "dice"}}</button></div>
+<div class="col col-w" id="col-w"><div class="cards"></div><button class="add" type="button" data-add="w">+ Answer</button></div>
+<div id="carry-block" hidden><h2 class="block-head">From last time</h2><ul class="carry" id="carry" role="list"></ul></div>
+<h2 class="block-head">Board <button class="icon-btn" type="button" id="cols-dice" title="Another column set, while the columns are empty" aria-label="Another column set">{{icon "dice"}}</button></h2>
 <div class="board" id="board">
-<div class="col col-a" id="col-a" data-col="a"><div class="col-head"><h3 class="col-fixed">Actions</h3><span class="col-count"></span></div><div class="cards"></div><button class="add" type="button" data-add="a">{{icon "plus"}}<span>Action</span></button></div>
+<div class="col col-a" id="col-a"><h3 class="col-title">Actions</h3><div class="cards"></div><button class="add" type="button" data-add="a">+ Action</button></div>
 </div>
-</section>
-
 <div class="picker" id="picker" role="menu" aria-label="Add a reaction" hidden></div>
-
-<template id="tpl-col"><div class="col"><div class="col-head"><input class="col-title" maxlength="80" aria-label="Column title" autocomplete="off"><span class="col-count"></span></div><div class="cards"></div><button class="add" type="button">{{icon "plus"}}<span>Card</span></button></div></template>
-<template id="tpl-card"><article class="rcard"><textarea rows="1" maxlength="2000" aria-label="Card text"></textarea><div class="rcard-foot"><div class="reacts"><button type="button" class="react-add" aria-label="Add a reaction" title="Add a reaction">{{icon "smile"}}</button></div><span class="lockmsg"></span><span class="who"></span><select class="owner" aria-label="Who owns this action" hidden></select><button type="button" class="del" aria-label="Delete card" title="Delete card">{{icon "x"}}</button></div></article></template>
+<template id="tpl-col"><div class="col"><input class="col-title" maxlength="80" aria-label="Column title" autocomplete="off"><div class="cards"></div><button class="add" type="button">+ Card</button></div></template>
+<template id="tpl-card"><article class="rcard"><textarea rows="1" maxlength="2000" aria-label="Card text"></textarea><div class="reacts" hidden></div><div class="rcard-foot"><span class="who"></span><span class="lockmsg"></span><span class="spacer"></span><button type="button" class="react-add" aria-label="Add a reaction" title="Add a reaction">{{icon "smile"}}</button><select class="owner" aria-label="Who does it" hidden></select><button type="button" class="del" aria-label="Delete card" title="Delete card">×</button></div></article></template>
 {{end}}

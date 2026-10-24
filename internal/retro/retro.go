@@ -33,10 +33,7 @@ const (
 	maxTitle   = 80
 	maxWarmup  = 300
 	maxColumns = 6
-	maxTimer   = 60
 	listLimit  = 300
-
-	timerShownAfterEnd = 10 * time.Minute
 )
 
 var Emojis = []string{"👍", "❤️", "😂", "🎉", "🤔", "😮"}
@@ -47,9 +44,8 @@ type Tool struct {
 	locks *Locks
 	app   *web.App
 
-	listT    *template.Template
-	roomT    *template.Template
-	actionsT *template.Template
+	listT *template.Template
+	roomT *template.Template
 }
 
 func New(pool *Pool) *Tool {
@@ -57,13 +53,7 @@ func New(pool *Pool) *Tool {
 }
 
 func (t *Tool) Info() web.ToolInfo {
-	return web.ToolInfo{
-		Slug:    Slug,
-		Name:    "Retro",
-		Summary: "Live team retrospective: warm-up, columns, reactions and action items that follow you to the next one.",
-		Icon:    "board",
-		Badge:   t.badge,
-	}
+	return web.ToolInfo{Slug: Slug, Name: "Retro"}
 }
 
 func (t *Tool) Mount(app *web.App) error {
@@ -84,7 +74,7 @@ func (t *Tool) Mount(app *web.App) error {
 		return err
 	}
 	for name, dst := range map[string]**template.Template{
-		"templates/list.html": &t.listT, "templates/room.html": &t.roomT, "templates/actions.html": &t.actionsT,
+		"templates/list.html": &t.listT, "templates/room.html": &t.roomT,
 	} {
 		if *dst, err = app.Templates(templateFS, name); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
@@ -92,33 +82,12 @@ func (t *Tool) Mount(app *web.App) error {
 	}
 	app.Page("GET /retro", t.list)
 	app.Page("POST /retro/new", t.create)
-	app.Page("GET /retro/actions", t.actions)
-	app.API("POST /retro/actions/done", t.actionDone)
 	app.Page("GET /retro/{id}", t.room)
 	app.API("GET /retro/{id}/state", t.stateJSON)
 	app.API("GET /retro/{id}/events", t.events)
 	app.API("POST /retro/{id}/do", t.do)
 	app.API("GET /retro/{id}/export.md", t.export)
 	return nil
-}
-
-func (t *Tool) badge(ctx context.Context) string {
-	open, last, err := t.repo.Stats(ctx)
-	if err != nil {
-		return ""
-	}
-	if last == 0 {
-		return "No retros yet"
-	}
-	s := "Last retro " + t.day(last)
-	switch open {
-	case 0:
-		return s
-	case 1:
-		return s + " · 1 open action"
-	default:
-		return s + " · " + strconv.Itoa(open) + " open actions"
-	}
 }
 
 func (t *Tool) when(ms int64) time.Time { return time.UnixMilli(ms).In(t.app.Cfg.TZ) }

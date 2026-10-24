@@ -7,58 +7,29 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/markbrutx/greenroom/internal/store"
 	"github.com/markbrutx/greenroom/internal/web"
 )
 
 type listRow struct {
 	ID    int64
 	Date  string
-	Title string
 	Cols  string
 	Cards int
-}
-
-type listData struct {
-	Rows []listRow
-	Sets []string
-	Open int
 }
 
 type State struct {
 	ID      int64    `json:"id"`
 	Date    string   `json:"date"`
-	Title   string   `json:"title"`
 	Warmup  string   `json:"warmup"`
 	Cols    []string `json:"cols"`
-	Hidden  bool     `json:"hidden"`
-	TimerOn bool     `json:"timerOn"`
-	TimerMs int64    `json:"timerMs"`
 	Cards   []Card   `json:"cards"`
 	Carry   []Carry  `json:"carry"`
 	Me      string   `json:"me"`
 	Names   []string `json:"names"`
 	Here    []string `json:"here"`
 	Emojis  []string `json:"emojis"`
-	Sets    []string `json:"sets"`
 	created int64
-}
-
-type roomData struct {
-	State *State
-	Title string
-	Date  string
-}
-
-type actionRow struct {
-	ID      int64
-	Body    string
-	Owner   string
-	RetroID int64
-	From    string
-	Retro   string
 }
 
 func (t *Tool) fail(w http.ResponseWriter, status int, msg string) {
@@ -76,77 +47,22 @@ func (t *Tool) list(w http.ResponseWriter, r *http.Request) {
 		t.dbFail(w, r, err)
 		return
 	}
-	open, _, err := t.repo.Stats(r.Context())
-	if err != nil {
-		t.dbFail(w, r, err)
-		return
-	}
-	d := listData{Sets: t.pool.SetNames(), Open: open, Rows: make([]listRow, 0, len(rows))}
+	out := make([]listRow, 0, len(rows))
 	for _, x := range rows {
-		d.Rows = append(d.Rows, listRow{ID: x.ID, Date: t.fullDate(x.CreatedAt), Title: x.Title, Cols: strings.Join(x.Cols, " · "), Cards: x.Cards})
+		out = append(out, listRow{ID: x.ID, Date: t.fullDate(x.CreatedAt), Cols: strings.Join(x.Cols, " · "), Cards: x.Cards})
 	}
-	t.app.Render(w, r, t.listT, web.View{Title: "Retro", Tool: Slug, Crumbs: []web.Crumb{{Label: "Retro"}}, Data: d})
+	t.app.Render(w, r, t.listT, web.View{Title: "Retro", Data: out})
 }
 
 func (t *Tool) create(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
-	if err := r.ParseForm(); err != nil {
-		t.fail(w, http.StatusRequestEntityTooLarge, "The form is too large.")
-		return
-	}
-	set := t.pool.RandomSet(nil)
-	if name := r.PostForm.Get("set"); name != "" {
-		s, ok := t.pool.Set(name)
-		if !ok {
-			t.fail(w, http.StatusBadRequest, "There is no column set called "+strconv.Quote(name)+".")
-			return
-		}
-		set = s
-	}
-	title := clip(strings.TrimSpace(r.PostForm.Get("title")), maxTitle)
-	id, err := t.repo.CreateRetro(r.Context(), title, t.pool.RandomWarmup(""), set.Columns)
+	set := t.pool.Sets[0]
+	id, err := t.repo.CreateRetro(r.Context(), t.pool.RandomWarmup(""), set.Columns)
 	if err != nil {
 		t.dbFail(w, r, err)
 		return
 	}
-	t.app.Log.Info("retro created", "id", id, "by", me(r), "set", set.Name)
+	t.app.Log.Info("retro created", "id", id, "by", me(r))
 	http.Redirect(w, r, "/retro/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
-}
-
-func (t *Tool) actions(w http.ResponseWriter, r *http.Request) {
-	list, err := t.repo.OpenActions(r.Context())
-	if err != nil {
-		t.dbFail(w, r, err)
-		return
-	}
-	rows := make([]actionRow, 0, len(list))
-	for _, a := range list {
-		rows = append(rows, actionRow{ID: a.ID, Body: a.Body, Owner: a.Owner, RetroID: a.RetroID, From: t.day(a.CreatedAt), Retro: a.RetroTitle})
-	}
-	t.app.Render(w, r, t.actionsT, web.View{Title: "Open actions", Tool: Slug,
-		Crumbs: []web.Crumb{{Label: "Retro", Href: "/retro"}, {Label: "Open actions"}}, Data: rows})
-}
-
-func (t *Tool) actionDone(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		ID   int64 `json:"id"`
-		Done bool  `json:"done"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&in); err != nil || in.ID <= 0 {
-		t.fail(w, http.StatusBadRequest, "The request is not valid JSON with an action id.")
-		return
-	}
-	err := t.repo.SetActionDone(r.Context(), in.ID, in.Done)
-	if errors.Is(err, ErrNotFound) {
-		t.fail(w, http.StatusNotFound, "This action no longer exists.")
-		return
-	}
-	if err != nil {
-		t.dbFail(w, r, err)
-		return
-	}
-	t.app.Hub.SendPrefix("retro:", map[string]any{"t": "carry", "id": in.ID, "done": in.Done})
-	writeJSON(w, map[string]any{})
 }
 
 func (t *Tool) load(r *http.Request, id int64) (*State, error) {
@@ -173,24 +89,10 @@ func (t *Tool) load(r *http.Request, id int64) (*State, error) {
 	for i := range carry {
 		carry[i].FromStr = t.day(carry[i].From)
 	}
-	on, ms := timerLeft(x.TimerEnd)
 	return &State{
-		ID: id, Date: t.fullDate(x.CreatedAt), Title: x.Title, Warmup: x.Warmup, Cols: x.Cols,
-		Hidden: x.Hidden, TimerOn: on, TimerMs: ms, Cards: cards, Carry: carry,
-		Me: me(r), Names: names, Here: t.app.Hub.Here(room(id)), Emojis: Emojis, Sets: t.pool.SetNames(),
-		created: x.CreatedAt,
+		ID: id, Date: t.fullDate(x.CreatedAt), Warmup: x.Warmup, Cols: x.Cols, Cards: cards, Carry: carry,
+		Me: me(r), Names: names, Here: t.app.Hub.Here(room(id)), Emojis: Emojis, created: x.CreatedAt,
 	}, nil
-}
-
-func timerLeft(end int64) (bool, int64) {
-	if end == 0 || store.Now()-end > timerShownAfterEnd.Milliseconds() {
-		return false, 0
-	}
-	left := end - store.Now()
-	if left < 0 {
-		left = 0
-	}
-	return true, left
 }
 
 func (t *Tool) room(w http.ResponseWriter, r *http.Request) {
@@ -208,17 +110,8 @@ func (t *Tool) room(w http.ResponseWriter, r *http.Request) {
 		t.dbFail(w, r, err)
 		return
 	}
-	title := s.Title
-	if title == "" {
-		title = "Retro " + s.Date
-	}
-	label := s.Title
-	if label == "" {
-		label = t.day(s.created)
-	}
-	t.app.Render(w, r, t.roomT, web.View{Title: title, Tool: Slug,
-		Crumbs: []web.Crumb{{Label: "Retro", Href: "/retro"}, {Label: label}},
-		Data:   roomData{State: s, Title: s.Title, Date: s.Date}})
+	t.app.Render(w, r, t.roomT, web.View{Title: "Retro " + t.day(s.created),
+		Crumbs: []web.Crumb{{Label: "Retro", Href: "/retro"}, {Label: t.day(s.created)}}, Data: s})
 }
 
 func (t *Tool) stateJSON(w http.ResponseWriter, r *http.Request) {
@@ -269,8 +162,6 @@ type op struct {
 	Tmp   string `json:"tmp"`
 	Emoji string `json:"emoji"`
 	On    bool   `json:"on"`
-	Min   int    `json:"min"`
-	Set   string `json:"set"`
 }
 
 var tmpPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
@@ -317,7 +208,7 @@ func (t *Tool) do(w http.ResponseWriter, r *http.Request) {
 	hub := t.app.Hub
 	rm := room(id)
 	sendMeta := func() {
-		hub.Send(rm, map[string]any{"t": "meta", "cols": x.Cols, "warmup": x.Warmup, "title": x.Title, "hidden": x.Hidden})
+		hub.Send(rm, map[string]any{"t": "meta", "cols": x.Cols, "warmup": x.Warmup})
 	}
 	cardErr := func(err error) {
 		if errors.Is(err, ErrNotFound) {
@@ -386,7 +277,7 @@ func (t *Tool) do(w http.ResponseWriter, r *http.Request) {
 	case "owner":
 		owner := strings.TrimSpace(o.Text)
 		if owner != "" && owner != Everyone && !t.app.Auth.Known(ctx, owner) {
-			t.fail(w, http.StatusBadRequest, strconv.Quote(owner)+" is not on the team list.")
+			t.fail(w, http.StatusBadRequest, strconv.Quote(owner)+" has not signed in during the last 90 days.")
 			return
 		}
 		c, err := t.repo.SetOwner(ctx, id, o.ID, owner)
@@ -429,16 +320,7 @@ func (t *Tool) do(w http.ResponseWriter, r *http.Request) {
 			t.fail(w, http.StatusConflict, "The columns already have cards, so the set stays. Click a column title to rename it.")
 			return
 		}
-		set := t.pool.RandomSet(x.Cols)
-		if o.Set != "" {
-			s, ok := t.pool.Set(o.Set)
-			if !ok {
-				t.fail(w, http.StatusBadRequest, "There is no column set called "+strconv.Quote(o.Set)+".")
-				return
-			}
-			set = s
-		}
-		x.Cols = append([]string(nil), set.Columns...)
+		x.Cols = append([]string(nil), t.pool.RandomSet(x.Cols).Columns...)
 		if err := t.repo.SetCols(ctx, id, x.Cols); err != nil {
 			t.dbFail(w, r, err)
 			return
@@ -482,38 +364,6 @@ func (t *Tool) do(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sendMeta()
-
-	case "title":
-		x.Title = clip(strings.Join(strings.Fields(o.Text), " "), maxTitle)
-		if err := t.repo.SetTitle(ctx, id, x.Title); err != nil {
-			t.dbFail(w, r, err)
-			return
-		}
-		sendMeta()
-
-	case "hidden":
-		x.Hidden = o.On
-		if err := t.repo.SetHidden(ctx, id, x.Hidden); err != nil {
-			t.dbFail(w, r, err)
-			return
-		}
-		sendMeta()
-
-	case "timer":
-		if o.Min < 0 || o.Min > maxTimer {
-			t.fail(w, http.StatusBadRequest, "The timer runs from 1 to "+strconv.Itoa(maxTimer)+" minutes, or 0 to stop it.")
-			return
-		}
-		var end int64
-		if o.Min > 0 {
-			end = store.Now() + int64(time.Duration(o.Min)*time.Minute/time.Millisecond)
-		}
-		if err := t.repo.SetTimer(ctx, id, end); err != nil {
-			t.dbFail(w, r, err)
-			return
-		}
-		on, ms := timerLeft(end)
-		hub.Send(rm, map[string]any{"t": "timer", "on": on, "ms": ms, "by": u})
 
 	default:
 		t.fail(w, http.StatusBadRequest, "Unknown action "+strconv.Quote(o.Op)+".")

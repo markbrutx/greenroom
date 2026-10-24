@@ -19,19 +19,12 @@ import (
 	"github.com/markbrutx/greenroom/internal/config"
 	"github.com/markbrutx/greenroom/internal/live"
 	"github.com/markbrutx/greenroom/internal/retro"
+	"github.com/markbrutx/greenroom/internal/store"
 	"github.com/markbrutx/greenroom/internal/storetest"
 	"github.com/markbrutx/greenroom/internal/web"
 )
 
 const testPassword = "correct-horse"
-
-var testHash = func() string {
-	h, err := auth.HashPassword(testPassword)
-	if err != nil {
-		panic(err)
-	}
-	return h
-}()
 
 type server struct {
 	*httptest.Server
@@ -40,10 +33,12 @@ type server struct {
 
 func start(t *testing.T, env map[string]string) *server {
 	t.Helper()
-	base := map[string]string{
-		"GREENROOM_PASSWORD_HASH": testHash,
-		"GREENROOM_SECRET":        strings.Repeat("s", 40),
-	}
+	return startDB(t, storetest.Open(t), env)
+}
+
+func startDB(t *testing.T, db *store.DB, env map[string]string) *server {
+	t.Helper()
+	base := map[string]string{"GREENROOM_PASSWORD": testPassword}
 	for k, v := range env {
 		base[k] = v
 	}
@@ -52,7 +47,6 @@ func start(t *testing.T, env map[string]string) *server {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	db := storetest.Open(t)
 	a, err := auth.New(context.Background(), cfg, db, log)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +102,7 @@ func (s *server) login(c *http.Client, name, password string) *http.Response {
 
 func (s *server) newRetro(c *http.Client) int64 {
 	s.t.Helper()
-	resp := s.post(c, "/retro/new", strings.NewReader("title=Sprint+1"), map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
+	resp := s.post(c, "/retro/new", strings.NewReader(""), map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
 	resp.Body.Close()
 	loc := resp.Header.Get("Location")
 	id, err := strconv.ParseInt(strings.TrimPrefix(loc, "/retro/"), 10, 64)
@@ -128,37 +122,63 @@ func (s *server) do(c *http.Client, id int64, op map[string]any) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
+func sessionCookie(t *testing.T, resp *http.Response) *http.Cookie {
+	t.Helper()
+	for _, ck := range resp.Cookies() {
+		if ck.Name == auth.CookieName {
+			return ck
+		}
+	}
+	t.Fatal("no session cookie")
+	return nil
+}
+
 func TestPasswordLogin(t *testing.T) {
-	s := start(t, map[string]string{"GREENROOM_USERS": "Alice,Bob"})
+	db := storetest.Open(t)
+	s := startDB(t, db, nil)
 	c := s.client()
 
 	resp, _ := c.Get(s.URL + "/retro")
 	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login") {
 		t.Fatalf("anonymous page: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
-	if resp := s.login(c, "alice", "wrong-password"); resp.StatusCode != http.StatusUnauthorized {
+	if resp := s.login(c, "Alice", "wrong-password"); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong password: %d", resp.StatusCode)
 	}
-	if resp := s.login(c, "mallory", testPassword); resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("name not on list: %d", resp.StatusCode)
+	if resp := s.login(c, "   ", testPassword); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("empty name: %d", resp.StatusCode)
 	}
-	resp = s.login(c, "  alice ", testPassword)
+	resp = s.login(c, "  Alice ", testPassword)
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("login: %d", resp.StatusCode)
 	}
-	var cookie *http.Cookie
-	for _, ck := range resp.Cookies() {
-		if ck.Name == auth.CookieName {
-			cookie = ck
-		}
-	}
-	if cookie == nil || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
+	cookie := sessionCookie(t, resp)
+	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
 		t.Fatalf("session cookie: %+v", cookie)
 	}
 	resp, _ = c.Get(s.URL + "/")
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/retro" {
+		t.Fatalf("home must open the first tool: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	resp, _ = c.Get(s.URL + "/retro")
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "Hi, Alice.") {
-		t.Fatalf("home after login: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "Alice") {
+		t.Fatalf("retro list after login: %d", resp.StatusCode)
+	}
+
+	other := s.client()
+	s.login(other, "alice", testPassword)
+	resp, _ = other.Get(s.URL + "/retro")
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Alice") {
+		t.Fatal("a second login with another case must reuse the stored name")
+	}
+
+	s.post(c, "/logout", nil, nil)
+	resp, _ = c.Get(s.URL + "/login")
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), `value="Alice"`) {
+		t.Fatal("the login form must offer the last used name")
 	}
 
 	forged := s.client()
@@ -166,6 +186,22 @@ func TestPasswordLogin(t *testing.T) {
 	forged.Jar.SetCookies(u, []*http.Cookie{{Name: auth.CookieName, Value: strings.Replace(cookie.Value, ".", "x.", 1)}})
 	if resp, _ := forged.Get(s.URL + "/retro"); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("forged cookie: %d", resp.StatusCode)
+	}
+
+	again := startDB(t, db, nil)
+	kept := again.client()
+	ku, _ := url.Parse(again.URL)
+	kept.Jar.SetCookies(ku, []*http.Cookie{{Name: auth.CookieName, Value: cookie.Value}})
+	if resp, _ := kept.Get(again.URL + "/retro"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("a restart with the same password keeps sessions: %d", resp.StatusCode)
+	}
+
+	changed := startDB(t, db, map[string]string{"GREENROOM_PASSWORD": "a new team password"})
+	gone := changed.client()
+	cu, _ := url.Parse(changed.URL)
+	gone.Jar.SetCookies(cu, []*http.Cookie{{Name: auth.CookieName, Value: cookie.Value}})
+	if resp, _ := gone.Get(changed.URL + "/retro"); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("a new password must sign everyone out: %d", resp.StatusCode)
 	}
 }
 
@@ -177,77 +213,6 @@ func TestLoginRateLimit(t *testing.T) {
 	}
 	if resp := s.login(c, "eve", testPassword); resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("after 5 failures the right password must wait: %d", resp.StatusCode)
-	}
-}
-
-func TestOpenModeFreeNames(t *testing.T) {
-	s := start(t, map[string]string{"GREENROOM_AUTH": "open", "GREENROOM_PASSWORD_HASH": ""})
-	c := s.client()
-	if resp := s.login(c, "   ", ""); resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("empty name: %d", resp.StatusCode)
-	}
-	if resp := s.login(c, "Dana", ""); resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("open login: %d", resp.StatusCode)
-	}
-	other := s.client()
-	s.login(other, "dana", "")
-	resp, _ := other.Get(s.URL + "/")
-	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "Hi, Dana.") {
-		t.Fatal("a second login with another case must reuse the stored name")
-	}
-}
-
-func TestHeaderAuthTrustsOnlyProxies(t *testing.T) {
-	trusted := start(t, map[string]string{
-		"GREENROOM_AUTH":             "header",
-		"GREENROOM_AUTH_HEADER":      "X-Auth-Request-Email",
-		"GREENROOM_AUTH_NAME_HEADER": "X-Auth-Request-User",
-		"GREENROOM_TRUSTED_PROXIES":  "127.0.0.1/32,::1",
-	})
-	get := func(s *server, header map[string]string) (int, string) {
-		req, _ := http.NewRequest(http.MethodGet, s.URL+"/", nil)
-		for k, v := range header {
-			req.Header.Set(k, v)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer resp.Body.Close()
-		b, _ := io.ReadAll(resp.Body)
-		return resp.StatusCode, string(b)
-	}
-	code, body := get(trusted, map[string]string{"X-Auth-Request-Email": "erin@example.com", "X-Auth-Request-User": "Erin"})
-	if code != http.StatusOK || !strings.Contains(body, "Hi, Erin.") {
-		t.Fatalf("trusted proxy: %d", code)
-	}
-	code, _ = get(trusted, nil)
-	if code != http.StatusUnauthorized {
-		t.Fatalf("missing header: %d", code)
-	}
-
-	untrusted := start(t, map[string]string{
-		"GREENROOM_AUTH":            "header",
-		"GREENROOM_TRUSTED_PROXIES": "10.0.0.0/8",
-	})
-	code, _ = get(untrusted, map[string]string{"X-Forwarded-User": "erin"})
-	if code != http.StatusUnauthorized {
-		t.Fatalf("header from an untrusted peer must be refused: %d", code)
-	}
-
-	listed := start(t, map[string]string{
-		"GREENROOM_AUTH":            "header",
-		"GREENROOM_TRUSTED_PROXIES": "127.0.0.1,::1",
-		"GREENROOM_USERS":           "Frank@Example.com",
-	})
-	code, _ = get(listed, map[string]string{"X-Forwarded-User": "mallory@example.com"})
-	if code != http.StatusForbidden {
-		t.Fatalf("user outside the allow-list: %d", code)
-	}
-	code, body = get(listed, map[string]string{"X-Forwarded-User": "frank@example.com"})
-	if code != http.StatusOK || !strings.Contains(body, "Frank@Example.com") {
-		t.Fatalf("allow-listed user: %d", code)
 	}
 }
 
@@ -319,17 +284,13 @@ func TestOpValidation(t *testing.T) {
 		{"owner not on team", map[string]any{"op": "owner", "id": cardID, "text": "Nobody"}, 400},
 		{"owner everyone", map[string]any{"op": "owner", "id": cardID, "text": "Everyone"}, 200},
 		{"owner known", map[string]any{"op": "owner", "id": cardID, "text": "alice"}, 200},
-		{"timer too long", map[string]any{"op": "timer", "min": 99}, 400},
-		{"timer ok", map[string]any{"op": "timer", "min": 5}, 200},
-		{"timer stop", map[string]any{"op": "timer", "min": 0}, 200},
 		{"empty column title", map[string]any{"op": "col", "i": 0, "text": "  "}, 400},
 		{"column index", map[string]any{"op": "col", "i": 7, "text": "x"}, 400},
 		{"empty warm-up", map[string]any{"op": "warmuptext", "text": ""}, 400},
-		{"unknown set", map[string]any{"op": "cols", "set": "Nope"}, 400},
-		{"named set", map[string]any{"op": "cols", "set": "Mad, Sad, Glad"}, 200},
+		{"random set", map[string]any{"op": "cols"}, 200},
+		{"timer is gone", map[string]any{"op": "timer", "min": 5}, 400},
+		{"title is gone", map[string]any{"op": "title", "text": "x"}, 400},
 		{"done on own retro", map[string]any{"op": "done", "id": cardID, "done": true}, 404},
-		{"hidden", map[string]any{"op": "hidden", "on": true}, 200},
-		{"title", map[string]any{"op": "title", "text": "Sprint   9"}, 200},
 	}
 	for _, tc := range cases {
 		code, body := s.do(c, id, tc.op)
@@ -357,7 +318,7 @@ func TestOpValidation(t *testing.T) {
 	var st retro.State
 	json.NewDecoder(resp.Body).Decode(&st)
 	resp.Body.Close()
-	if st.Title != "Sprint 9" || !st.Hidden || st.TimerOn || strings.Join(st.Cols, "|") != "Mad|Sad|Glad" {
+	if len(st.Cols) == 0 || st.Me != "alice" {
 		t.Fatalf("state: %+v", st)
 	}
 	var card retro.Card
@@ -372,10 +333,10 @@ func TestOpValidation(t *testing.T) {
 }
 
 func TestTextSoftLockAndSequence(t *testing.T) {
-	s := start(t, map[string]string{"GREENROOM_AUTH": "open", "GREENROOM_PASSWORD_HASH": ""})
+	s := start(t, nil)
 	alice, bob := s.client(), s.client()
-	s.login(alice, "alice", "")
-	s.login(bob, "bob", "")
+	s.login(alice, "alice", testPassword)
+	s.login(bob, "bob", testPassword)
 	id := s.newRetro(alice)
 	_, body := s.do(alice, id, map[string]any{"op": "add", "col": "0"})
 	var added struct{ C retro.Card }
@@ -400,10 +361,10 @@ func TestTextSoftLockAndSequence(t *testing.T) {
 }
 
 func TestEventsBroadcastReactions(t *testing.T) {
-	s := start(t, map[string]string{"GREENROOM_AUTH": "open", "GREENROOM_PASSWORD_HASH": ""})
+	s := start(t, nil)
 	alice, bob := s.client(), s.client()
-	s.login(alice, "alice", "")
-	s.login(bob, "bob", "")
+	s.login(alice, "alice", testPassword)
+	s.login(bob, "bob", testPassword)
 	id := s.newRetro(alice)
 	_, body := s.do(alice, id, map[string]any{"op": "add", "col": "w", "tmp": "abc"})
 	var added struct{ C retro.Card }
@@ -430,6 +391,6 @@ func TestEventsBroadcastReactions(t *testing.T) {
 	waitFor(`"t":"here"`)
 	s.do(alice, id, map[string]any{"op": "react", "id": added.C.ID, "emoji": "🎉", "on": true})
 	waitFor(`"t":"react"`)
-	s.do(alice, id, map[string]any{"op": "timer", "min": 3})
-	waitFor(`"t":"timer"`)
+	s.do(alice, id, map[string]any{"op": "warmup"})
+	waitFor(`"t":"meta"`)
 }

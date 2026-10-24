@@ -18,11 +18,8 @@ func NewRepo(db *store.DB) *Repo { return &Repo{db: db} }
 type Retro struct {
 	ID        int64
 	CreatedAt int64
-	Title     string
 	Warmup    string
 	Cols      []string
-	Hidden    bool
-	TimerEnd  int64
 }
 
 type Card struct {
@@ -51,18 +48,8 @@ type Carry struct {
 type Summary struct {
 	ID        int64
 	CreatedAt int64
-	Title     string
 	Cols      []string
 	Cards     int
-}
-
-type OpenAction struct {
-	ID         int64
-	Body       string
-	Owner      string
-	RetroID    int64
-	RetroTitle string
-	CreatedAt  int64
 }
 
 func notFound(err error) error {
@@ -72,19 +59,19 @@ func notFound(err error) error {
 	return err
 }
 
-func (r *Repo) CreateRetro(ctx context.Context, title, warmup string, cols []string) (int64, error) {
+func (r *Repo) CreateRetro(ctx context.Context, warmup string, cols []string) (int64, error) {
 	b, _ := json.Marshal(cols)
 	var id int64
-	err := r.db.QueryRow(ctx, `insert into retros (created_at, title, warmup, cols) values (?, ?, ?, ?) returning id`,
-		store.Now(), title, warmup, string(b)).Scan(&id)
+	err := r.db.QueryRow(ctx, `insert into retros (created_at, warmup, cols) values (?, ?, ?) returning id`,
+		store.Now(), warmup, string(b)).Scan(&id)
 	return id, err
 }
 
 func (r *Repo) Retro(ctx context.Context, id int64) (*Retro, error) {
 	x := &Retro{ID: id}
 	var cols string
-	err := r.db.QueryRow(ctx, `select created_at, title, warmup, cols, hidden, timer_end from retros where id = ?`, id).
-		Scan(&x.CreatedAt, &x.Title, &x.Warmup, &cols, &x.Hidden, &x.TimerEnd)
+	err := r.db.QueryRow(ctx, `select created_at, warmup, cols from retros where id = ?`, id).
+		Scan(&x.CreatedAt, &x.Warmup, &cols)
 	if err != nil {
 		return nil, notFound(err)
 	}
@@ -95,7 +82,7 @@ func (r *Repo) Retro(ctx context.Context, id int64) (*Retro, error) {
 }
 
 func (r *Repo) List(ctx context.Context, limit int) ([]Summary, error) {
-	rows, err := r.db.Query(ctx, `select r.id, r.created_at, r.title, r.cols,
+	rows, err := r.db.Query(ctx, `select r.id, r.created_at, r.cols,
 		(select count(*) from cards c where c.retro_id = r.id and not c.deleted and c.body <> '')
 		from retros r order by r.id desc limit ?`, limit)
 	if err != nil {
@@ -106,7 +93,7 @@ func (r *Repo) List(ctx context.Context, limit int) ([]Summary, error) {
 	for rows.Next() {
 		var s Summary
 		var cols string
-		if err := rows.Scan(&s.ID, &s.CreatedAt, &s.Title, &cols, &s.Cards); err != nil {
+		if err := rows.Scan(&s.ID, &s.CreatedAt, &cols, &s.Cards); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(cols), &s.Cols)
@@ -238,17 +225,6 @@ func (r *Repo) SetCarryDone(ctx context.Context, retroID, cardID int64, done boo
 	return affected(res, err)
 }
 
-func (r *Repo) SetActionDone(ctx context.Context, cardID int64, done bool) error {
-	var doneAt sql.NullInt64
-	if done {
-		doneAt = sql.NullInt64{Int64: store.Now(), Valid: true}
-	}
-	res, err := r.db.Exec(ctx, `update cards set done = ?, done_retro = null, done_at = ?, ver = ver + 1, updated_at = ?
-		where id = ? and col = 'a' and not deleted and body <> ''`,
-		done, doneAt, store.Now(), cardID)
-	return affected(res, err)
-}
-
 func (r *Repo) CardInRetro(ctx context.Context, retroID, cardID int64) (bool, error) {
 	var n int
 	err := r.db.QueryRow(ctx, `select count(*) from cards where id = ? and retro_id = ? and not deleted`, cardID, retroID).Scan(&n)
@@ -290,46 +266,4 @@ func (r *Repo) SetCols(ctx context.Context, retroID int64, cols []string) error 
 
 func (r *Repo) SetWarmup(ctx context.Context, retroID int64, warmup string) error {
 	return affected(r.db.Exec(ctx, `update retros set warmup = ? where id = ?`, warmup, retroID))
-}
-
-func (r *Repo) SetTitle(ctx context.Context, retroID int64, title string) error {
-	return affected(r.db.Exec(ctx, `update retros set title = ? where id = ?`, title, retroID))
-}
-
-func (r *Repo) SetHidden(ctx context.Context, retroID int64, hidden bool) error {
-	return affected(r.db.Exec(ctx, `update retros set hidden = ? where id = ?`, hidden, retroID))
-}
-
-func (r *Repo) SetTimer(ctx context.Context, retroID int64, end int64) error {
-	return affected(r.db.Exec(ctx, `update retros set timer_end = ? where id = ?`, end, retroID))
-}
-
-func (r *Repo) OpenActions(ctx context.Context) ([]OpenAction, error) {
-	rows, err := r.db.Query(ctx, `select c.id, c.body, c.owner, c.retro_id, r.title, r.created_at from cards c
-		join retros r on r.id = c.retro_id
-		where c.col = 'a' and not c.deleted and not c.done and c.body <> ''
-		order by c.retro_id desc, c.id limit 500`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []OpenAction{}
-	for rows.Next() {
-		var a OpenAction
-		if err := rows.Scan(&a.ID, &a.Body, &a.Owner, &a.RetroID, &a.RetroTitle, &a.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
-}
-
-func (r *Repo) Stats(ctx context.Context) (open int, last int64, err error) {
-	if err = r.db.QueryRow(ctx, `select count(*) from cards where col = 'a' and not deleted and not done and body <> ''`).Scan(&open); err != nil {
-		return
-	}
-	var lastN sql.NullInt64
-	err = r.db.QueryRow(ctx, `select max(created_at) from retros`).Scan(&lastN)
-	last = lastN.Int64
-	return
 }

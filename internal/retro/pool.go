@@ -77,15 +77,6 @@ func (p *Pool) validate() error {
 	return nil
 }
 
-func (p *Pool) Set(name string) (ColumnSet, bool) {
-	for _, s := range p.Sets {
-		if s.Name == name {
-			return s, true
-		}
-	}
-	return ColumnSet{}, false
-}
-
 func (p *Pool) RandomSet(not []string) ColumnSet {
 	cur := strings.Join(not, "\x00")
 	for tries := 0; tries < 20; tries++ {
@@ -105,14 +96,6 @@ func (p *Pool) RandomWarmup(not string) string {
 		}
 	}
 	return p.Warmups[0]
-}
-
-func (p *Pool) SetNames() []string {
-	out := make([]string, len(p.Sets))
-	for i, s := range p.Sets {
-		out[i] = s.Name
-	}
-	return out
 }
 
 func pick[T any](xs []T) T {

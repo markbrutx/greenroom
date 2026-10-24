@@ -1,18 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -31,7 +28,6 @@ const usage = `Greenroom: small self-hosted tools for teams.
 
 Usage:
   greenroom [serve]        start the server
-  greenroom hash           read a password from stdin, print its argon2id hash
   greenroom backup FILE    write a consistent copy of the SQLite database to FILE
   greenroom health         exit 0 when the local server answers /healthz
   greenroom version        print the version
@@ -48,8 +44,6 @@ func main() {
 	switch cmd {
 	case "serve":
 		err = serve()
-	case "hash":
-		err = hash(os.Stdin, os.Stdout)
 	case "backup":
 		if len(os.Args) != 3 {
 			err = errors.New("usage: greenroom backup FILE")
@@ -84,23 +78,6 @@ func fullVersion() string {
 		}
 	}
 	return version
-}
-
-func hash(in io.Reader, out io.Writer) error {
-	line, err := bufio.NewReader(in).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	pw := strings.TrimRight(line, "\r\n")
-	if len(pw) < 8 {
-		return errors.New("the password must be at least 8 characters")
-	}
-	h, err := auth.HashPassword(pw)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(out, h)
-	return err
 }
 
 func backup(file string) error {
@@ -187,13 +164,6 @@ func serve() error {
 	}
 	defer db.Close()
 
-	if cfg.AuthMode == config.AuthOpen {
-		log.Warn("GREENROOM_AUTH=open: there is no password, anyone who can reach this server can sign in under any name. Use it only on a closed network.")
-	}
-	if cfg.AuthMode == config.AuthPassword && !auth.ValidHash(cfg.PasswordHash) {
-		return errors.New("GREENROOM_PASSWORD_HASH is not an argon2id hash; create one with: greenroom hash")
-	}
-
 	a, err := auth.New(ctx, cfg, db, log)
 	if err != nil {
 		return err
@@ -234,7 +204,7 @@ func serve() error {
 		}
 	}()
 	log.Info("greenroom started", "version", fullVersion(), "addr", ln.Addr().String(), "db", string(db.Dialect),
-		"auth", cfg.AuthMode, "tls", cfg.TLSCert != "")
+		"tls", cfg.TLSCert != "")
 
 	select {
 	case err := <-errc:

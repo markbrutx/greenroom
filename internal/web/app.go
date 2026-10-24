@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -35,11 +34,8 @@ type Tool interface {
 }
 
 type ToolInfo struct {
-	Slug    string
-	Name    string
-	Summary string
-	Icon    string
-	Badge   func(ctx context.Context) string
+	Slug string
+	Name string
 }
 
 type Crumb struct {
@@ -50,10 +46,9 @@ type Crumb struct {
 type View struct {
 	Title  string
 	Crumbs []Crumb
-	Tool   string
+	Tools  []ToolInfo
 	User   string
 	Brand  Brand
-	Mode   string
 	Data   any
 }
 
@@ -66,7 +61,6 @@ type App struct {
 
 	mux    *http.ServeMux
 	base   *template.Template
-	homeT  *template.Template
 	loginT *template.Template
 	brand  Brand
 	tools  []ToolInfo
@@ -98,9 +92,6 @@ func New(cfg *config.Config, db *store.DB, hub *live.Hub, a *auth.Auth, log *slo
 	app.base, err = template.New("base").Funcs(template.FuncMap{
 		"asset": app.assetURL,
 		"icon":  icon,
-		"initials": func(s string) string {
-			return Initials(s)
-		},
 	}).ParseFS(templateFS, "templates/layout.html")
 	if err != nil {
 		return nil, err
@@ -149,7 +140,9 @@ func (app *App) Render(w http.ResponseWriter, r *http.Request, t *template.Templ
 func (app *App) RenderStatus(w http.ResponseWriter, r *http.Request, t *template.Template, v View, status int) {
 	v.User = auth.User(r.Context())
 	v.Brand = app.brand
-	v.Mode = app.Cfg.AuthMode
+	if len(app.tools) > 1 {
+		v.Tools = app.tools
+	}
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, "layout", v); err != nil {
 		app.Log.Error("render", "err", err, "path", r.URL.Path)
@@ -234,26 +227,4 @@ func secure(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func Initials(s string) string {
-	s = strings.TrimSpace(s)
-	if at := strings.IndexByte(s, '@'); at > 0 {
-		s = s[:at]
-	}
-	parts := strings.FieldsFunc(s, func(r rune) bool { return r == ' ' || r == '.' || r == '_' || r == '-' })
-	var out []rune
-	for _, p := range parts {
-		r := []rune(p)
-		if len(r) > 0 {
-			out = append(out, r[0])
-		}
-		if len(out) == 2 {
-			break
-		}
-	}
-	if len(out) == 0 {
-		return "?"
-	}
-	return strings.ToUpper(string(out))
 }

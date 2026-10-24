@@ -1,23 +1,8 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}">{{end}}
 {{define "main"}}
-<section class="page-head">
-<div>
-<p class="eyebrow">Retro</p>
-<h1>Retrospectives</h1>
-<p class="lead">Warm up, write together, agree on what to change.</p>
-</div>
-<a class="btn" href="/retro/actions">{{icon "checks"}}<span>Open actions</span><span class="count">{{.Data.Open}}</span></a>
-</section>
-<form class="new-retro card" method="post" action="/retro/new">
-<label class="field grow"><span>Title, optional</span><input name="title" maxlength="80" placeholder="Sprint 42" autocomplete="off"></label>
-<label class="field"><span>Columns</span><select name="set" class="input"><option value="">Random set</option>{{range .Data.Sets}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
-<button class="btn btn-primary" type="submit">{{icon "plus"}}<span>Start a retro</span></button>
-</form>
+<h1 class="page-title">Retro</h1>
+<form method="post" action="/retro/new"><button class="btn btn-primary" type="submit">+ New retro</button></form>
 <ul class="retro-list" role="list">
-{{range .Data.Rows}}<li><a class="retro-row" href="/retro/{{.ID}}">
-<span class="rr-main"><span class="rr-date">{{.Date}}</span>{{with .Title}}<span class="rr-title">{{.}}</span>{{end}}</span>
-<span class="rr-cols">{{.Cols}}</span>
-<span class="rr-count">{{.Cards}} {{if eq .Cards 1}}card{{else}}cards{{end}}</span>
-</a></li>{{else}}<li class="empty">No retros yet. Start the first one above.</li>{{end}}
+{{range .Data}}<li><a class="retro-row" href="/retro/{{.ID}}"><span class="rr-date">{{.Date}}</span><span class="rr-cols">{{.Cols}}</span><span class="rr-count">{{.Cards}} {{if eq .Cards 1}}card{{else}}cards{{end}}</span></a></li>{{else}}<li class="empty">No retros yet.</li>{{end}}
 </ul>
 {{end}}

@@ -7,19 +7,6 @@ import (
 	"time"
 )
 
-func TestPasswordHashRoundTrip(t *testing.T) {
-	h, err := HashPassword("a long team password")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ValidHash(h) || !CheckPassword(h, "a long team password") {
-		t.Fatal("the right password must match")
-	}
-	if CheckPassword(h, "a long team passwort") || CheckPassword("garbage", "x") {
-		t.Fatal("a wrong password or broken hash must not match")
-	}
-}
-
 func TestLimiterBlocksAndExpires(t *testing.T) {
 	l := NewLimiter(3, 50*time.Millisecond)
 	for i := 0; i < 3; i++ {

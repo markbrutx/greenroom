@@ -1,5 +1,5 @@
 {{define "layout"}}<!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -8,7 +8,6 @@
 <meta name="color-scheme" content="light dark">
 <title>{{.Title}} · {{.Brand.Name}}</title>
 <link rel="icon" href="/brand/logo?v={{.Brand.Version}}">
-<script src="{{asset "theme.js"}}"></script>
 <link rel="stylesheet" href="{{asset "app.css"}}">
 <link rel="stylesheet" href="/brand.css?v={{.Brand.Version}}">
 {{block "head" .}}{{end}}
@@ -16,14 +15,14 @@
 <body class="{{block "bodyclass" .}}{{end}}">
 {{if .User}}<header class="topbar">
 <a class="brand" href="/"><img src="/brand/logo?v={{.Brand.Version}}" alt="" width="28" height="28"><span>{{.Brand.Name}}</span></a>
-<nav class="crumbs" aria-label="Breadcrumb">{{range .Crumbs}}<span class="sep" aria-hidden="true">/</span>{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span aria-current="page">{{.Label}}</span>{{end}}{{end}}</nav>
+{{with .Tools}}<nav class="tools" aria-label="Tools">{{range .}}<a href="/{{.Slug}}">{{.Name}}</a>{{end}}</nav>{{end}}
+{{with .Crumbs}}<nav class="crumbs" aria-label="Breadcrumb">{{range .}}<span class="sep" aria-hidden="true">/</span>{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span aria-current="page">{{.Label}}</span>{{end}}{{end}}</nav>{{end}}
 <span class="spacer"></span>
 {{block "bar" .}}{{end}}
-<button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark theme" title="Switch theme"><span class="when-light">{{icon "moon"}}</span><span class="when-dark">{{icon "sun"}}</span></button>
-<div class="me"><span class="avatar" aria-hidden="true">{{initials .User}}</span><span class="me-name">{{.User}}</span>
-{{if ne .Mode "header"}}<form method="post" action="/logout"><button class="icon-btn" type="submit" aria-label="Sign out" title="Sign out">{{icon "logout"}}</button></form>{{end}}</div>
+<span class="me">{{.User}}</span>
+<form class="logout" method="post" action="/logout"><button class="icon-btn" type="submit" aria-label="Sign out" title="Sign out">{{icon "logout"}}</button></form>
 </header>{{end}}
-<main class="wrap{{block "wrapclass" .}}{{end}}" id="main">{{block "main" .}}{{end}}</main>
+<main class="wrap" id="main">{{block "main" .}}{{end}}</main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>{{end}}

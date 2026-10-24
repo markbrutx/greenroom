@@ -5,8 +5,10 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"embed"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -28,6 +30,7 @@ var migrations embed.FS
 
 const (
 	CookieName    = "greenroom_session"
+	NameCookie    = "greenroom_name"
 	SessionLength = 30 * 24 * time.Hour
 	APIHeader     = "X-Greenroom"
 	MaxNameRunes  = 40
@@ -40,8 +43,8 @@ type Auth struct {
 	db      *store.DB
 	log     *slog.Logger
 	key     []byte
+	pass    [32]byte
 	limiter *Limiter
-	argon   chan struct{}
 
 	mu      sync.Mutex
 	touched map[string]time.Time
@@ -57,36 +60,42 @@ func New(ctx context.Context, cfg *config.Config, db *store.DB, log *slog.Logger
 	if err := db.Migrate(ctx, "auth", sub); err != nil {
 		return nil, err
 	}
-	secret := cfg.Secret
-	if len(secret) == 0 {
-		secret = make([]byte, 32)
-		if _, err := rand.Read(secret); err != nil {
-			return nil, err
-		}
-		if cfg.AuthMode != config.AuthHeader {
-			log.Warn("GREENROOM_SECRET is not set: using a random key, everyone signs in again after a restart")
-		}
+	stored, err := sessionKey(ctx, db)
+	if err != nil {
+		return nil, err
 	}
-	m := hmac.New(sha256.New, secret)
-	m.Write([]byte("session|" + cfg.AuthMode + "|" + cfg.PasswordHash))
+	m := hmac.New(sha256.New, stored)
+	m.Write([]byte(cfg.Password))
 	return &Auth{
 		cfg:     cfg,
 		db:      db,
 		log:     log,
 		key:     m.Sum(nil),
+		pass:    sha256.Sum256([]byte(cfg.Password)),
 		limiter: NewLimiter(5, 15*time.Minute),
-		argon:   make(chan struct{}, 2),
 		touched: map[string]time.Time{},
 	}, nil
 }
 
-func (a *Auth) Mode() string { return a.cfg.AuthMode }
-
-func (a *Auth) UsesLoginForm() bool { return a.cfg.AuthMode != config.AuthHeader }
-
-func (a *Auth) NeedsPassword() bool { return a.cfg.AuthMode == config.AuthPassword }
-
-func (a *Auth) HasAllowList() bool { return len(a.cfg.Users) > 0 }
+func sessionKey(ctx context.Context, db *store.DB) ([]byte, error) {
+	fresh := make([]byte, 32)
+	if _, err := rand.Read(fresh); err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(ctx, `insert into settings (key, value) values ('session_key', ?) on conflict (key) do nothing`,
+		hex.EncodeToString(fresh)); err != nil {
+		return nil, fmt.Errorf("store session key: %w", err)
+	}
+	var v string
+	if err := db.QueryRow(ctx, `select value from settings where key = 'session_key'`).Scan(&v); err != nil {
+		return nil, fmt.Errorf("read session key: %w", err)
+	}
+	key, err := hex.DecodeString(v)
+	if err != nil || len(key) < 32 {
+		return nil, errors.New("the session key in the settings table is damaged; delete that row to sign everyone out and make a new one")
+	}
+	return key, nil
+}
 
 func User(ctx context.Context) string {
 	s, _ := ctx.Value(ctxKey{}).(string)
@@ -111,20 +120,9 @@ func CleanName(s string) string {
 	return s
 }
 
-func (a *Auth) allowed(name string) string {
-	for _, u := range a.cfg.Users {
-		if strings.EqualFold(u, name) {
-			return u
-		}
-	}
-	return ""
-}
-
 var (
-	ErrNoName       = errors.New("Enter your name.")
-	ErrNotOnList    = errors.New("This name is not on the team list. Ask your admin to add it.")
-	ErrWrongPass    = errors.New("Wrong team password.")
-	ErrNotLoginMode = errors.New("Sign-in is handled by your company login.")
+	ErrNoName    = errors.New("Enter your name.")
+	ErrWrongPass = errors.New("Wrong team password.")
 )
 
 type BlockedError struct{ Until time.Time }
@@ -134,9 +132,6 @@ func (e BlockedError) Error() string {
 }
 
 func (a *Auth) Login(ctx context.Context, ip, rawName, password string) (string, error) {
-	if !a.UsesLoginForm() {
-		return "", ErrNotLoginMode
-	}
 	if until, blocked := a.limiter.Blocked(ip); blocked {
 		return "", BlockedError{until}
 	}
@@ -144,29 +139,13 @@ func (a *Auth) Login(ctx context.Context, ip, rawName, password string) (string,
 	if name == "" {
 		return "", ErrNoName
 	}
-	if a.HasAllowList() {
-		canon := a.allowed(name)
-		if canon == "" {
-			a.limiter.Fail(ip)
-			return "", ErrNotOnList
-		}
-		name = canon
-	}
-	if a.NeedsPassword() {
-		a.argon <- struct{}{}
-		ok := CheckPassword(a.cfg.PasswordHash, password)
-		<-a.argon
-		if !ok {
-			a.limiter.Fail(ip)
-			return "", ErrWrongPass
-		}
+	got := sha256.Sum256([]byte(password))
+	if subtle.ConstantTimeCompare(got[:], a.pass[:]) != 1 {
+		a.limiter.Fail(ip)
+		return "", ErrWrongPass
 	}
 	a.limiter.Reset(ip)
-	canon, err := a.remember(ctx, name, !a.HasAllowList())
-	if err != nil {
-		return "", err
-	}
-	return canon, nil
+	return a.remember(ctx, name, true)
 }
 
 func (a *Auth) remember(ctx context.Context, name string, adoptStored bool) (string, error) {
@@ -206,9 +185,6 @@ func (a *Auth) touch(ctx context.Context, name string) {
 }
 
 func (a *Auth) People(ctx context.Context) ([]string, error) {
-	if a.HasAllowList() {
-		return append([]string(nil), a.cfg.Users...), nil
-	}
 	rows, err := a.db.Query(ctx, `select name from people where last_seen > ? order by key`,
 		time.Now().Add(-peopleWindow).UnixMilli())
 	if err != nil {
@@ -227,9 +203,6 @@ func (a *Auth) People(ctx context.Context) ([]string, error) {
 }
 
 func (a *Auth) Known(ctx context.Context, name string) bool {
-	if a.HasAllowList() {
-		return a.allowed(name) == name
-	}
 	var n int
 	err := a.db.QueryRow(ctx, `select count(*) from people where key = ? and name = ?`, strings.ToLower(name), name).Scan(&n)
 	return err == nil && n > 0
@@ -253,6 +226,27 @@ func (a *Auth) StartSession(w http.ResponseWriter, r *http.Request, name string)
 		Secure:   isHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     NameCookie,
+		Value:    base64.RawURLEncoding.EncodeToString([]byte(name)),
+		Path:     "/login",
+		MaxAge:   int(365 * 24 * time.Hour / time.Second),
+		HttpOnly: true,
+		Secure:   isHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func LastName(r *http.Request) string {
+	c, err := r.Cookie(NameCookie)
+	if err != nil {
+		return ""
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
+	if err != nil {
+		return ""
+	}
+	return CleanName(string(raw))
 }
 
 func (a *Auth) EndSession(w http.ResponseWriter, r *http.Request) {
@@ -284,11 +278,7 @@ func (a *Auth) fromCookie(r *http.Request) string {
 	if err != nil {
 		return ""
 	}
-	name := string(raw)
-	if a.HasAllowList() && a.allowed(name) != name {
-		return ""
-	}
-	return name
+	return string(raw)
 }
 
 type Denied struct {
@@ -296,45 +286,16 @@ type Denied struct {
 	Reason string
 }
 
-func (a *Auth) Identify(r *http.Request) (string, *Denied) {
-	if a.cfg.AuthMode != config.AuthHeader {
-		if name := a.fromCookie(r); name != "" {
-			return name, nil
-		}
-		return "", &Denied{http.StatusUnauthorized, "Your session has ended. Sign in again."}
-	}
-	peer := PeerIP(r)
-	if !peer.IsValid() || !Trusted(peer, a.cfg.TrustedProxies) {
-		return "", &Denied{http.StatusUnauthorized, "This request did not come through the trusted sign-in proxy."}
-	}
-	id := CleanName(r.Header.Get(a.cfg.AuthHeader))
-	if id == "" {
-		return "", &Denied{http.StatusUnauthorized, "The sign-in proxy did not send the " + a.cfg.AuthHeader + " header."}
-	}
-	if a.HasAllowList() {
-		canon := a.allowed(id)
-		if canon == "" {
-			return "", &Denied{http.StatusForbidden, id + " is not on the team list. Ask your admin to add it."}
-		}
-		return canon, nil
-	}
-	if a.cfg.AuthNameHeader != "" {
-		if display := CleanName(r.Header.Get(a.cfg.AuthNameHeader)); display != "" {
-			return display, nil
-		}
-	}
-	return id, nil
+func (a *Auth) Identify(r *http.Request) (string, bool) {
+	name := a.fromCookie(r)
+	return name, name != ""
 }
 
 func (a *Auth) Page(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		name, denied := a.Identify(r)
-		if denied != nil {
-			if a.UsesLoginForm() {
-				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
-				return
-			}
-			http.Error(w, denied.Reason, denied.Status)
+		name, ok := a.Identify(r)
+		if !ok {
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 			return
 		}
 		a.touch(r.Context(), name)
@@ -344,9 +305,9 @@ func (a *Auth) Page(next http.Handler) http.Handler {
 
 func (a *Auth) API(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		name, denied := a.Identify(r)
-		if denied != nil {
-			http.Error(w, denied.Reason, denied.Status)
+		name, ok := a.Identify(r)
+		if !ok {
+			http.Error(w, "Your session has ended. Sign in again.", http.StatusUnauthorized)
 			return
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(APIHeader) != "1" {

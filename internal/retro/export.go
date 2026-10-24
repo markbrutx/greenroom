@@ -31,11 +31,7 @@ func (t *Tool) export(w http.ResponseWriter, r *http.Request) {
 
 func Markdown(s *State, date string) string {
 	var b strings.Builder
-	title := "Retro " + date
-	if s.Title != "" {
-		title = s.Title + " (" + date + ")"
-	}
-	b.WriteString("# " + title + "\n")
+	b.WriteString("# Retro " + date + "\n")
 
 	byCol := map[string][]Card{}
 	for _, c := range s.Cards {
