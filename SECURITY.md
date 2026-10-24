@@ -14,8 +14,8 @@ Use GitHub private vulnerability reporting: open
 to the **Security** tab and click **Report a vulnerability**. There is no
 security email address.
 
-Include the version (`greenroom version`), the auth mode, the database type,
-and the steps to reproduce.
+Include the version (`greenroom version`), the database type and the steps
+to reproduce.
 
 What to expect:
 
@@ -56,25 +56,20 @@ cross-site form cannot set.
 **Signed session cookie.** The session cookie `greenroom_session` holds the
 name and an expiry, signed with HMAC-SHA256. It is `HttpOnly`,
 `SameSite=Lax`, `Secure` when the request came over HTTPS or with
-`X-Forwarded-Proto: https`, and lasts 30 days. The signing key is derived from
-`GREENROOM_SECRET` together with the auth mode and the password hash.
-Rotating the secret or changing the team password signs everyone out. If
-`GREENROOM_SECRET` is unset, a random key is used and sessions end at each
-restart.
+`X-Forwarded-Proto: https`, and lasts 30 days. The signing key is
+HMAC(stored key, team password): the stored key is 32 random bytes created
+on first start and kept in the `settings` table. Changing
+`GREENROOM_PASSWORD` signs everyone out; deleting the `session_key` row does
+the same after a restart.
 
-**Password hashing.** The team password is stored only as an argon2id hash
-(m=64 MiB, t=2, p=1, 16-byte salt). At most 2 password checks run at the same
-time, so a burst of logins cannot exhaust memory.
+**Password check.** The team password comes from `GREENROOM_PASSWORD` and
+is compared in constant time. It is never written to the database or the
+logs.
 
 **Login rate limit.** After 5 failed sign-ins from one client IP within 15
 minutes, that IP is blocked for 15 minutes. The counter lives in memory and
-resets on restart. Behind a proxy, the client IP is read from
-`X-Forwarded-For` only when the peer is in `GREENROOM_TRUSTED_PROXIES`.
-
-**Header auth only from trusted proxies.** In header mode the identity
-header is accepted only when the TCP peer is inside
-`GREENROOM_TRUSTED_PROXIES`. Requests from any other address get 401.
-Greenroom refuses to start in header mode without that list.
+resets on restart. The client IP is read from `X-Forwarded-For` only when
+the peer is in `GREENROOM_TRUSTED_PROXIES` (loopback by default).
 
 **Request limits.** Request bodies are capped (4 KB for forms, at most 16 KB
 for JSON calls), request headers at 64 KB, and slow headers time out after 10
@@ -90,14 +85,11 @@ update checks, no CDN, no external fonts.
 
 These are deliberate trade-offs. Plan your deployment around them.
 
-- **One shared team password.** Password mode has no per-user passwords.
-  Anyone with the password can sign in under any name. If you need individual
-  identity, use header mode with your SSO.
+- **One shared team password.** There are no per-user passwords. Anyone
+  with the password can sign in under any name. Keep Greenroom inside your
+  network; an SSO proxy in front can add a second gate.
 - **Everyone can edit everything.** A retro is a team whiteboard. Anyone
   signed in can edit or delete any card.
-- **Private writing mode is not secrecy.** It blurs other people's cards in
-  the browser while the team writes. The cards are still sent to every
-  browser in the retro and can be read with developer tools.
 - **No encryption at rest.** Data is stored unencrypted in the database. Use
   disk encryption on the server and protect backups the same way.
 - **No audit log.** Greenroom does not record who changed or deleted what.
