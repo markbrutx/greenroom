@@ -37,7 +37,7 @@
 .warmup textarea:hover { border-color: var(--line); }
 .warmup textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
 
-.col-w .cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+.col-w .cards { display: grid; align-items: start; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
 .col-w .cards:not(:empty) { margin-bottom: 10px; }
 
 .carry {
@@ -100,7 +100,9 @@ input.col-title:focus { outline: none; border-color: var(--accent); background: 
 }
 .react-add .i { width: 18px; height: 18px; }
 .react-add { opacity: 0; transition: opacity .15s ease; }
-.rcard:hover .react-add, .rcard:focus-within .react-add, .react-add[aria-expanded="true"] { opacity: 1; }
+.rcard .del { opacity: 0; transition: opacity .15s ease; }
+.rcard:hover .react-add, .rcard:focus-within .react-add, .react-add[aria-expanded="true"],
+.rcard:hover .del, .rcard:focus-within .del { opacity: 1; }
 .react-add:hover { color: var(--accent-ink); }
 .rcard .del { font-size: 1.2rem; line-height: 1; }
 .rcard .del:hover { color: var(--danger); }
@@ -131,7 +133,7 @@ select.owner:focus { outline: none; border-color: var(--accent); }
 .picker button.mine { background: var(--accent-soft); }
 
 @media (hover: none) {
-  .react-add { opacity: .6; }
+  .react-add, .rcard .del { opacity: .6; }
   .chip, .react-add, .rcard .del, select.owner { height: 38px; }
   .react-add, .rcard .del { width: 38px; }
 }
