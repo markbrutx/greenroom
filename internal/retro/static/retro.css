@@ -165,13 +165,14 @@
 }
 .rcard textarea:focus { outline: none; }
 .rcard textarea::placeholder { color: var(--faint); }
-.rcard.veiled textarea { filter: blur(6px); user-select: none; }
+.rcard.veiled textarea, .rcard.veiled .reacts { filter: blur(6px); user-select: none; }
 .rcard.veiled .reacts, .rcard.veiled .del, .rcard.veiled select { opacity: .35; }
 
 .rcard-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 36px; font-size: .8rem; color: var(--muted); }
 .reacts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; }
 .lockmsg { color: var(--accent-ink); font-weight: 600; }
 .lockmsg:empty { display: none; }
+.rcard.col-a .who { display: none; }
 .who { max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .chip {

@@ -425,10 +425,8 @@
     }
     cards.set(c.id, el);
     if (el._c.owner) api({ op: 'owner', id: c.id, text: el._c.owner }).catch(() => {});
-    if (el._ta.value) {
-      el._typed = true;
-      sendText(el, openEl !== el).catch(() => {});
-    }
+    el._typed = true;
+    if (el._ta.value || openEl !== el) sendText(el, openEl !== el).catch(() => {});
     renderReacts(el);
   }
 
