@@ -285,18 +285,28 @@
     picker._el = el;
     picker._anchor = anchor;
     picker.hidden = false;
-    const r = anchor.getBoundingClientRect();
-    const pw = picker.offsetWidth;
-    const ph = picker.offsetHeight;
-    let left = Math.min(Math.max(8, r.left), window.innerWidth - pw - 8);
-    let top = r.top - ph - 8;
-    if (top < 68) top = r.bottom + 8;
-    picker.style.left = left + 'px';
-    picker.style.top = top + 'px';
+    placePicker();
     picker.classList.add('on');
     anchor.setAttribute('aria-expanded', 'true');
     const first = $('button', picker);
     if (first) first.focus({ preventScroll: true });
+  }
+
+  function placePicker() {
+    const anchor = picker._anchor;
+    if (picker.hidden || !anchor) return;
+    const r = anchor.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) {
+      closePicker(false);
+      return;
+    }
+    const pw = picker.offsetWidth;
+    const ph = picker.offsetHeight;
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - pw - 8);
+    let top = r.top - ph - 8;
+    if (top < 68) top = r.bottom + 8;
+    picker.style.left = left + 'px';
+    picker.style.top = top + 'px';
   }
 
   function closePicker(refocus) {
@@ -733,8 +743,8 @@
     }
   });
 
-  window.addEventListener('resize', () => closePicker(false));
-  window.addEventListener('scroll', () => closePicker(false), { passive: true });
+  window.addEventListener('resize', placePicker);
+  window.addEventListener('scroll', placePicker, { passive: true });
 
   document.addEventListener('click', (e) => {
     const add = e.target.closest('[data-add]');

@@ -154,6 +154,7 @@ button { cursor: pointer; }
 .crumbs a, .crumbs span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crumbs a { color: var(--muted); }
 .crumbs [aria-current] { color: var(--ink); }
+.crumbs > :not(:nth-last-child(-n+2)) { display: none; }
 .spacer { flex: 1; }
 .when-dark { display: none; }
 :root[data-theme="dark"] .when-dark { display: block; }
@@ -264,6 +265,7 @@ select.input { appearance: auto; }
 @media (min-width: 640px) {
   .brand span { display: inline; }
   .me-name { display: inline; margin-left: 6px; }
+  .crumbs > :not(:nth-last-child(-n+2)) { display: revert; }
   .wrap { padding: 28px 24px 72px; }
   .topbar { padding: 8px 20px; gap: 10px; }
 }

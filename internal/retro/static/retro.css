@@ -59,6 +59,9 @@
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .toolbar .btn { padding: 0 14px; }
+.toolbar .wide { display: none; }
+.toolbar .seg { flex: 1 1 100%; justify-content: space-between; }
+.toolbar .btn { flex: 1 1 auto; }
 
 .seg {
   display: inline-flex; align-items: center; height: 42px; padding: 0 3px;
@@ -251,6 +254,8 @@ select.owner:focus { outline: none; box-shadow: var(--ring); border-color: var(-
 
 @media (min-width: 640px) {
   .new-retro .btn { flex: 0 0 auto; }
+  .toolbar .wide { display: inline; }
+  .toolbar .seg, .toolbar .btn { flex: 0 0 auto; }
   .here { display: flex; }
 }
 
