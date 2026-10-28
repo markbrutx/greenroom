@@ -17,15 +17,19 @@ import (
 const maxLogoBytes = 512 << 10
 
 type Brand struct {
-	Name    string
-	Version string
-	css     []byte
-	logo    []byte
-	logoCT  string
+	Name     string
+	Wordmark string
+	Version  string
+	css      []byte
+	logo     []byte
+	logoCT   string
 }
 
 func loadBrand(cfg *config.Config) (Brand, error) {
-	b := Brand{Name: cfg.Name}
+	b := Brand{Name: cfg.Name, Wordmark: cfg.Name}
+	if cfg.Name == "Greenroom" {
+		b.Wordmark = "greenroom"
+	}
 	if cfg.Logo != "" {
 		info, err := os.Stat(cfg.Logo)
 		if err != nil {
