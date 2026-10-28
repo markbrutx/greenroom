@@ -119,9 +119,6 @@ func (app *App) AddStatic(prefix string, fsys fs.FS) error {
 		}
 		sum := sha256.Sum256(body)
 		ctype := mime.TypeByExtension(path.Ext(p))
-		if path.Ext(p) == ".woff2" {
-			ctype = "font/woff2"
-		}
 		if ctype == "" {
 			ctype = "application/octet-stream"
 		}

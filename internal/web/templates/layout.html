@@ -8,14 +8,13 @@
 <meta name="color-scheme" content="light dark">
 <title>{{.Title}} · {{.Brand.Name}}</title>
 <link rel="icon" href="/brand/logo?v={{.Brand.Version}}">
-<link rel="preload" href="{{asset "fonts/nunito-latin.woff2"}}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{asset "app.css"}}">
 <link rel="stylesheet" href="/brand.css?v={{.Brand.Version}}">
 {{block "head" .}}{{end}}
 </head>
 <body class="{{block "bodyclass" .}}{{end}}">
 <header class="topbar">
-<a class="brand" href="/"><img src="/brand/logo?v={{.Brand.Version}}" alt="" width="28" height="28"><span class="wordmark">{{.Brand.Wordmark}}</span></a>
+<a class="brand" href="/"><img src="/brand/logo?v={{.Brand.Version}}" alt="" width="28" height="28"><span>{{.Brand.Name}}</span></a>
 {{block "crumbs" .}}{{end}}
 <span class="spacer"></span>
 {{block "bar" .}}{{end}}
