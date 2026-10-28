@@ -458,6 +458,7 @@
       return;
     }
     board.querySelectorAll('.col.board-col').forEach((e) => e.remove());
+    document.body.style.setProperty('--cols', String(next.length + 1));
     const actions = $('#col-a');
     next.forEach((t, i) => {
       const d = tplCol.cloneNode(true);
@@ -803,8 +804,7 @@
 
   if (S.welcome) {
     history.replaceState(null, '', base);
-    $('#welcome').hidden = false;
-    openPanel();
+    toast('Room created. Use Share to invite people.');
   }
 
   let opened = false;

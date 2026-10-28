@@ -233,7 +233,7 @@ func TestCreateRoom(t *testing.T) {
 	s := start(t, nil, nil)
 	c := s.client()
 	status, body := s.get(c, "/")
-	if status != http.StatusOK || !strings.Contains(body, "New retro") || !strings.Contains(body, "Enter a code or link") {
+	if status != http.StatusOK || !strings.Contains(body, "Create room") || !strings.Contains(body, "enter a code or link") {
 		t.Fatalf("home: %d", status)
 	}
 	if resp := s.post(c, "/new", "name=++&access=open", nil); resp.StatusCode != http.StatusBadRequest {
@@ -536,8 +536,8 @@ func TestJanitorDeletesIdleRooms(t *testing.T) {
 	if status, _ := s.get(host, "/"+fresh); status != http.StatusOK {
 		t.Fatalf("active room: %d", status)
 	}
-	if _, body := s.get(host, "/"); !strings.Contains(body, "2 hours without activity") {
-		t.Fatal("the home page names the configured lifetime")
+	if _, body := s.get(host, "/"+fresh); !strings.Contains(body, "2 hours without activity") {
+		t.Fatal("the room names the configured lifetime")
 	}
 }
 

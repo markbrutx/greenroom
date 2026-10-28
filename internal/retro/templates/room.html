@@ -1,10 +1,8 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/retro.js"}}" defer></script>{{end}}
 {{define "crumbs"}}<button class="code-chip" type="button" data-panel title="Room settings and link">{{.Data.Code}}</button>{{end}}
 {{define "bar"}}<div class="here" id="here" aria-label="Here now"></div>
-<button class="btn btn-sm" type="button" id="share" data-panel aria-label="Share and room settings">{{icon "share"}}<span class="lbl">Share</span><span class="badge" id="badge" hidden></span></button>
-<button class="btn btn-sm" type="button" id="copy-agent" title="Copy the retro as Markdown for an AI agent" aria-label="Copy for agent">{{icon "sparkle"}}<span class="lbl">Copy for agent</span></button>
-<a class="icon-btn" id="download" href="/{{.Data.Code}}/export.md?download=1" download title="Download .md" aria-label="Download .md">{{icon "download"}}</a>
-<span class="me" id="me">{{.Data.Me}}</span>{{end}}
+<button class="btn btn-sm" type="button" id="share" data-panel aria-label="Share and room settings">Share<span class="badge" id="badge" hidden></span></button>
+<button class="btn btn-sm btn-primary" type="button" id="copy-agent" title="Copy the retro as Markdown for an AI agent"><span class="lbl">Copy for agent</span><span class="lbl-short">Copy</span></button>{{end}}
 {{define "main"}}
 <script type="application/json" id="retro-state">{{.Data}}</script>
 <h2 class="block-head">Warm-up</h2>
@@ -21,14 +19,14 @@
 <p class="welcome" id="welcome" hidden>Your room is ready. Share the link to invite people.</p>
 <section class="psec">
 <h3>Invite</h3>
-<div class="linkrow"><input class="input" id="room-link" readonly aria-label="Room link"><button class="btn btn-primary" type="button" id="copy-link">{{icon "copy"}}Copy link</button></div>
+<div class="linkrow"><input class="input" id="room-link" readonly aria-label="Room link"><button class="btn btn-primary" type="button" id="copy-link">Copy link</button></div>
 <p class="hint" id="access-hint"></p>
 </section>
 <section class="psec host-only" hidden>
 <h3>Access</h3>
 <div class="seg" role="radiogroup" aria-label="Who can come in">
-<label><input type="radio" name="access" value="closed"><span>{{icon "lock"}}Ask to join</span></label>
-<label><input type="radio" name="access" value="open"><span>{{icon "globe"}}Open</span></label>
+<label><input type="radio" name="access" value="closed"><span>Ask to join</span></label>
+<label><input type="radio" name="access" value="open"><span>Open</span></label>
 </div>
 </section>
 <section class="psec host-only" id="waiting-sec" hidden>
@@ -39,23 +37,21 @@
 <h3>People <span class="count" id="people-count"></span></h3>
 <ul class="people" id="people" role="list"></ul>
 </section>
-<section class="psec">
-<h3>Export</h3>
-<div class="row"><button class="btn" type="button" id="copy-agent-2">{{icon "sparkle"}}Copy for agent</button><a class="btn" href="/{{.Data.Code}}/export.md?download=1" download>{{icon "download"}}Download .md</a></div>
-<p class="hint">Markdown with the warm-up, columns, actions and owners, ready to paste into a prompt.</p>
-</section>
-<section class="psec host-only" hidden>
-<h3>Host link</h3>
-<p class="hint">Opens this room as host on another device. Anyone with it can manage the room, so keep it to yourself.</p>
-<div class="linkrow"><input class="input" id="host-link" readonly aria-label="Host link"><button class="btn" type="button" id="copy-host">{{icon "key"}}Copy</button></div>
-</section>
-<section class="psec host-only danger" hidden>
-<h3>Delete room</h3>
-<p class="hint">Deletes the board, cards and actions for everyone, right away. Rooms are also deleted on their own after {{.Data.TTL}} without activity.</p>
-<div class="row" id="delete-row"><button class="btn btn-danger" type="button" id="delete">{{icon "trash"}}Delete room</button></div>
+<details class="psec more">
+<summary>More</summary>
+<div class="more-body">
+<div class="row"><a class="btn" href="/{{.Data.Code}}/export.md?download=1" download>Download .md</a><button class="btn" type="button" id="copy-agent-2" hidden>Copy for agent</button></div>
+<div class="host-only" hidden>
+<p class="hint">Host link: opens this room as host on another device. Keep it to yourself.</p>
+<div class="linkrow"><input class="input" id="host-link" readonly aria-label="Host link"><button class="btn" type="button" id="copy-host">Copy</button></div>
+</div>
+<div class="host-only danger" hidden>
+<div class="row" id="delete-row"><button class="btn btn-danger" type="button" id="delete">Delete room</button></div>
 <div class="row confirm" id="delete-confirm" hidden><span>Delete for everyone?</span><button class="btn" type="button" id="delete-cancel">Cancel</button><button class="btn btn-danger" type="button" id="delete-yes">Delete</button></div>
-</section>
-<p class="hint guest-only">This room is deleted after {{.Data.TTL}} without activity.</p>
+</div>
+<p class="hint">Rooms are deleted after {{.Data.TTL}} without activity.</p>
+</div>
+</details>
 </dialog>
 <template id="tpl-col"><div class="col"><input class="col-title" maxlength="80" aria-label="Column title" autocomplete="off"><div class="cards"></div><button class="add" type="button">+ Card</button></div></template>
 <template id="tpl-card"><article class="rcard"><textarea rows="1" maxlength="2000" aria-label="Card text"></textarea><div class="reacts" hidden></div><div class="rcard-foot"><span class="who"></span><span class="lockmsg"></span><span class="spacer"></span><button type="button" class="react-add" aria-label="Add a reaction" title="Add a reaction">{{icon "smile"}}</button><select class="owner" aria-label="Who does it" hidden></select><button type="button" class="del" aria-label="Delete card" title="Delete card">×</button></div></article></template>
