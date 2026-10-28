@@ -10,14 +10,16 @@ aws ssm put-parameter --name /greenroom/password --type SecureString --value 'te
 AMI=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64 --query Parameter.Value --output text)
 aws cloudformation create-stack --stack-name greenroom-demo \
   --template-body file://deploy/aws/greenroom.yaml --capabilities CAPABILITY_IAM \
-  --parameters ParameterKey=Domain,ParameterValue=retro.example.com \
+  --parameters ParameterKey=Domain,ParameterValue=example.com \
+               ParameterKey=RedirectFrom,ParameterValue=www.example.com \
                ParameterKey=ImageTag,ParameterValue=0.2.0 \
                ParameterKey=ImageId,ParameterValue=$AMI
 aws cloudformation describe-stacks --stack-name greenroom-demo --query 'Stacks[0].Outputs'
 ```
 
-Point an A record for the domain at `PublicIp`. Caddy gets the certificate
-once DNS resolves.
+Point an A record for the domain at `PublicIp` and a CNAME for
+`RedirectFrom` at the domain. Caddy gets the certificates once DNS resolves.
+`RedirectFrom` is optional.
 
 ## Upgrade
 

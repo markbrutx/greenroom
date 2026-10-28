@@ -4,6 +4,9 @@ Description: Greenroom on one small EC2 instance behind Caddy
 Parameters:
   Domain:
     Type: String
+  RedirectFrom:
+    Type: String
+    Default: ""
   ImageTag:
     Type: String
     Default: latest
@@ -102,6 +105,9 @@ Resources:
                 }
               }
               EOF
+              if [ -n "${RedirectFrom}" ]; then
+                printf '%s {\n  redir https://%s{uri} permanent\n}\n' "${RedirectFrom}" "${Domain}" >> Caddyfile
+              fi
               cat > compose.yml <<'EOF'
               services:
                 greenroom:
