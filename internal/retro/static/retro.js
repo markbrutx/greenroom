@@ -188,10 +188,10 @@
   function render(el) {
     const c = el._c;
     const ta = el._ta;
+    el.hidden = !!c.id && c.author !== me && !c.body.trim() && !c.owner && !hasReactions(c) && document.activeElement !== ta;
     const editing = document.activeElement === ta || el._timer || el._inflight > 0;
     if (!editing && ta.value !== c.body) ta.value = c.body;
     grow(ta);
-    el.classList.toggle('mine', c.author === me);
     el.dataset.id = c.id || '';
     $('.who', el).textContent = c.author;
     const sel = $('select.owner', el);

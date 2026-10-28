@@ -1,4 +1,4 @@
-{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/retro.js"}}" defer></script>{{end}}
+{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}">{{end}}
 {{define "crumbs"}}<button class="code-chip" type="button" data-panel title="Room settings and link">{{.Data.Code}}</button>{{end}}
 {{define "bar"}}<div class="here" id="here" aria-label="Here now"></div>
 <button class="btn btn-sm" type="button" id="share" data-panel aria-label="Invite people and room settings">Invite<span class="badge" id="badge" hidden></span></button>
@@ -54,5 +54,6 @@
 </details>
 </dialog>
 <template id="tpl-col"><div class="col"><input class="col-title" maxlength="80" aria-label="Column title" autocomplete="off"><div class="cards"></div><button class="add" type="button">+ Card</button></div></template>
-<template id="tpl-card"><article class="rcard"><textarea rows="1" maxlength="2000" aria-label="Card text"></textarea><div class="reacts" hidden></div><div class="rcard-foot"><span class="who"></span><span class="lockmsg"></span><span class="spacer"></span><button type="button" class="react-add" aria-label="Add a reaction" title="Add a reaction">{{icon "smile"}}</button><select class="owner" aria-label="Who does it" hidden></select><button type="button" class="del" aria-label="Delete card" title="Delete card">×</button></div></article></template>
+<template id="tpl-card"><article class="rcard"><textarea rows="1" maxlength="2000" aria-label="Card text"></textarea><div class="rcard-foot"><span class="who"></span><span class="lockmsg"></span><div class="reacts" hidden></div><span class="spacer"></span><button type="button" class="react-add" aria-label="Add a reaction" title="Add a reaction">{{icon "smile"}}</button><select class="owner" aria-label="Who does it" hidden></select><button type="button" class="del" aria-label="Delete card" title="Delete card">×</button></div></article></template>
+<script src="{{asset "retro/retro.js"}}"></script>
 {{end}}
