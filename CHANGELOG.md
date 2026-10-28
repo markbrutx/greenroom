@@ -17,6 +17,8 @@ and start with a new one.
 - Rooms are deleted after `GREENROOM_ROOM_TTL` (default 7 days) without
   activity.
 - Per-IP rate limits for creating rooms, joining and unknown room codes.
+- New look: flat deep green canvas, white cards, rounded type (Nunito is
+  embedded for systems without a rounded system font), new logo.
 - Removed: `GREENROOM_PASSWORD`, the sign-in page, the retro list, carry-over
   of open actions, Postgres support and the multi-tool scaffolding.
 

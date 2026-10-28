@@ -5,7 +5,15 @@
   const code = box.dataset.code;
   const base = '/' + code;
   const note = document.getElementById('host-note');
+  const time = document.getElementById('ring-time');
+  const started = Date.now();
   let done = false;
+
+  function tick() {
+    const s = Math.floor((Date.now() - started) / 1000);
+    time.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+  setInterval(tick, 1000);
 
   function go(url) {
     if (done) return;
@@ -21,9 +29,6 @@
         if (note) note.hidden = !!m.online;
         break;
       case 'admitted':
-        es.close();
-        go(base);
-        break;
       case 'denied':
         es.close();
         go(base);
