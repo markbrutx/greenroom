@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Greenroom on one small EC2 instance behind Caddy
+
+Parameters:
+  Domain:
+    Type: String
+  ImageTag:
+    Type: String
+    Default: latest
+  InstanceType:
+    Type: String
+    Default: t4g.micro
+  ImageId:
+    Type: AWS::EC2::Image::Id
+  PasswordParameter:
+    Type: String
+    Default: /greenroom/password
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Greenroom web
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: udp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+      Tags:
+        - { Key: Name, Value: !Ref AWS::StackName }
+
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: read-password
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PasswordParameter}
+
+  Profile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref Role]
+
+  Address:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - { Key: Name, Value: !Ref AWS::StackName }
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref Profile
+      SecurityGroupIds: [!GetAtt SecurityGroup.GroupId]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeType: gp3, VolumeSize: 8, Encrypted: true, DeleteOnTermination: true }
+      Tags:
+        - { Key: Name, Value: !Ref AWS::StackName }
+      UserData:
+        Fn::Base64: !Join
+          - ""
+          - - "#!/bin/bash\n"
+            - !Sub |
+              set -euo pipefail
+              TOKEN=$(curl -sfX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 900")
+              for i in $(seq 1 60); do
+                [ "$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || true)" = "${Address}" ] && break
+                sleep 5
+              done
+              dnf install -y docker
+              systemctl enable --now docker
+              mkdir -p /usr/local/lib/docker/cli-plugins
+              curl -fsSL --retry 5 -o /usr/local/lib/docker/cli-plugins/docker-compose "https://github.com/docker/compose/releases/download/v5.6.1/docker-compose-linux-$(uname -m)"
+              chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+              mkdir -p /opt/greenroom
+              cd /opt/greenroom
+              PASSWORD=$(aws ssm get-parameter --region ${AWS::Region} --name ${PasswordParameter} --with-decryption --query Parameter.Value --output text)
+              umask 077
+              printf 'GREENROOM_PASSWORD=%s\nTAG=%s\n' "$PASSWORD" "${ImageTag}" > .env
+              umask 022
+              cat > Caddyfile <<'EOF'
+              ${Domain} {
+                encode zstd gzip
+                reverse_proxy greenroom:8080 {
+                  flush_interval -1
+                }
+              }
+              EOF
+              cat > compose.yml <<'EOF'
+              services:
+                greenroom:
+                  image: ghcr.io/markbrutx/greenroom:${!TAG}
+                  restart: unless-stopped
+                  read_only: true
+                  security_opt: [no-new-privileges:true]
+                  cap_drop: [ALL]
+                  environment:
+                    GREENROOM_PASSWORD: ${!GREENROOM_PASSWORD}
+                    GREENROOM_TRUSTED_PROXIES: 172.16.0.0/12
+                  volumes:
+                    - data:/data
+                caddy:
+                  image: caddy:2
+                  restart: unless-stopped
+                  ports: ["80:80", "443:443", "443:443/udp"]
+                  volumes:
+                    - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                    - caddy_data:/data
+                    - caddy_config:/config
+              volumes:
+                data:
+                caddy_data:
+                caddy_config:
+              EOF
+              docker compose pull
+              docker compose up -d
+
+  AddressAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt Address.AllocationId
+      InstanceId: !Ref Instance
+
+Outputs:
+  PublicIp:
+    Value: !Ref Address
+  InstanceId:
+    Value: !Ref Instance
