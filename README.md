@@ -13,7 +13,7 @@ Meet-style retro rooms in one self-hosted binary.
    reloading.
 3. **Run the retro.** Warm-up question, board columns from a template set,
    cards, reactions and actions with an owner, all live.
-4. **Export for your agent.** *Copy for agent* puts the whole retro on the
+4. **Export for your agent.** *Copy .md* puts the whole retro on the
    clipboard as Markdown, ready for a prompt; *Download .md* saves it.
 5. **Delete it.** The host deletes the room for everyone. Rooms also delete
    themselves after 7 days without activity.

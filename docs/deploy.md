@@ -37,7 +37,7 @@ it.
 
 Serve Greenroom over HTTPS: room links and host links are the only keys to a
 room. Terminate TLS in the proxy, or let Greenroom serve HTTPS with
-`GREENROOM_TLS_CERT` and `GREENROOM_TLS_KEY`. "Copy link" and "Copy for agent"
+`GREENROOM_TLS_CERT` and `GREENROOM_TLS_KEY`. "Copy link" and "Copy .md"
 use the clipboard API, which browsers only allow on HTTPS or localhost; on
 plain HTTP they fall back to selecting the text or downloading the file.
 

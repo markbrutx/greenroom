@@ -12,7 +12,7 @@ and start with a new one.
   person, or admits everyone, without reloads.
 - Host controls: switch open and closed, remove people, delete the room for
   everyone, and a private host link to manage the room from another device.
-- Copy for agent and Download .md export the retro as Markdown with
+- Copy .md and Download .md export the retro as Markdown with
   participants, warm-up, columns, actions with owners and reaction counts.
 - Rooms are deleted after `GREENROOM_ROOM_TTL` (default 7 days) without
   activity.

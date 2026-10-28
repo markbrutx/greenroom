@@ -302,3 +302,5 @@ body:has(.panel[open]) .knocks { display: none; }
 .more summary:hover { color: var(--ink); }
 .more-body { display: grid; gap: 14px; margin-top: 14px; }
 #delete { background: transparent; color: var(--danger); border-color: var(--line); }
+.btn-quiet { background: transparent; border-color: transparent; color: var(--muted); font-weight: 500; }
+.btn-quiet:hover { background: var(--surface-2); color: var(--ink); }
