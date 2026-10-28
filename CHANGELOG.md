@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.3.0
 
 Breaking: Greenroom is now a Meet-style retro room tool. 0.3 starts with an
 empty database and refuses to open a 0.2 file; keep the old file as a backup
