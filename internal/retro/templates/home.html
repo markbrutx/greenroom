@@ -1,12 +1,19 @@
-{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}">{{end}}
+{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/home.js"}}" defer></script>{{end}}
 {{define "bodyclass"}}page-start{{end}}
 {{define "main"}}
 {{with .Data.Notice}}<p class="notice" role="status">{{.}}</p>{{end}}
 <section class="start">
+<div class="hero">
 <h1>Retro rooms for your team.</h1>
 <p class="start-sub">Create a room, share the link, export for your agent.</p>
+</div>
+<section class="my-rooms" id="my-rooms" aria-labelledby="my-rooms-title" hidden>
+<h2 id="my-rooms-title">Your rooms</h2>
+<ul class="room-list" id="my-rooms-list" role="list"></ul>
+</section>
 <form class="start-card" method="post" action="/new">
-<label class="field"><span>Your name</span><input class="input" name="name" autocomplete="name" autocapitalize="words" maxlength="40" value="{{.Data.Name}}" required {{if not .Data.Name}}autofocus{{end}}></label>
+<h2 class="new-title">New room</h2>
+<label class="field"><span>Your name</span><input class="input" name="name" autocomplete="name" autocapitalize="words" maxlength="40" value="{{.Data.Name}}" required></label>
 <details class="settings"{{if .Data.Open}} open{{end}}>
 <summary>Room settings</summary>
 <fieldset class="access">
@@ -25,4 +32,5 @@
 {{with .Data.JoinErr}}<p class="form-error" role="alert">{{.}}</p>{{end}}
 </form>
 </section>
+<template id="tpl-room"><li class="room-row"><a class="room-link" href="/"><span class="room-title"></span><span class="room-meta"></span></a><span class="room-host" hidden>Host</span><button class="room-forget" type="button" title="Remove from this list">×</button></li></template>
 {{end}}

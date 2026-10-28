@@ -26,31 +26,29 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111113;
-    --surface: #1a1a1d;
-    --surface-2: #222226;
-    --line: #2c2c31;
-    --line-strong: #3a3a40;
-    --ink: #ededef;
-    --muted: #a0a0a8;
-    --faint: #6b6b73;
-    --accent: #ededef;
-    --accent-ink: #ededef;
-    --on-accent: #111113;
-    --good: #3ccf6e;
-    --danger: #ff8a7a;
-    --on-danger: #2a0b08;
-    --accent-hover: #ffffff;
-    --accent-soft: #222226;
-    --accent-softer: #1d1d20;
-    --accent-line: #3a3a40;
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
-    --shadow-lg: 0 2px 8px rgb(0 0 0 / 0.35), 0 24px 56px -20px rgb(0 0 0 / 0.7);
-    --ring: 0 0 0 3px rgb(237 237 239 / 0.22);
-    color-scheme: dark;
-  }
+:root[data-theme="dark"] {
+  --bg: #111113;
+  --surface: #1a1a1d;
+  --surface-2: #222226;
+  --line: #2c2c31;
+  --line-strong: #3a3a40;
+  --ink: #ededef;
+  --muted: #a0a0a8;
+  --faint: #6b6b73;
+  --accent: #ededef;
+  --accent-ink: #ededef;
+  --on-accent: #111113;
+  --good: #3ccf6e;
+  --danger: #ff8a7a;
+  --on-danger: #2a0b08;
+  --accent-hover: #ffffff;
+  --accent-soft: #222226;
+  --accent-softer: #1d1d20;
+  --accent-line: #3a3a40;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 2px 8px rgb(0 0 0 / 0.35), 0 24px 56px -20px rgb(0 0 0 / 0.7);
+  --ring: 0 0 0 3px rgb(237 237 239 / 0.22);
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -118,6 +116,9 @@ button { cursor: pointer; }
 }
 .brand:hover { text-decoration: none; }
 .brand img { width: 28px; height: 28px; border-radius: 8px; object-fit: contain; }
+.mark { display: block; flex: none; }
+.mark .lg-c { fill: var(--ink); }
+.mark .lg-a { fill: var(--bg); stroke: var(--bg); }
 .brand span { display: none; }
 .spacer { flex: 1; }
 .me { display: none; font-size: .9rem; color: var(--muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -168,3 +169,7 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; }
 }
+
+.theme-toggle .i-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .i-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .i-moon { display: none; }

@@ -9,6 +9,22 @@
   const EVERYONE = 'Everyone';
 
   const $ = (sel, root) => (root || document).querySelector(sel);
+
+  const ROOMS = 'greenroom:rooms';
+  function savedRooms() {
+    try { return JSON.parse(localStorage.getItem(ROOMS) || '[]'); } catch (e) { return []; }
+  }
+  function remember() {
+    try {
+      const list = savedRooms().filter((r) => r.code !== code);
+      list.unshift({ code, host: !!S.host, name: me, date: S.date, warmup: S.warmup || '', seen: Date.now() });
+      localStorage.setItem(ROOMS, JSON.stringify(list.slice(0, 30)));
+    } catch (e) {}
+  }
+  function forget() {
+    try { localStorage.setItem(ROOMS, JSON.stringify(savedRooms().filter((r) => r.code !== code))); } catch (e) {}
+  }
+  remember();
   const tplCard = $('#tpl-card').content.firstElementChild;
   const tplCol = $('#tpl-col').content.firstElementChild;
   const picker = $('#picker');
@@ -38,6 +54,7 @@
     if (leaving) return true;
     if (status === 404) {
       leaving = true;
+      forget();
       location.replace('/?n=deleted');
       return true;
     }
@@ -735,6 +752,7 @@
     $('#delete-yes').disabled = true;
     hostApi({ op: 'delete' }).then(() => {
       leaving = true;
+      forget();
       location.replace('/?n=deleted');
     }).catch(() => { $('#delete-yes').disabled = false; });
   });
@@ -804,7 +822,7 @@
 
   if (S.welcome) {
     history.replaceState(null, '', base);
-    toast('Room created. Use Share to invite people.');
+    toast('Room created. Use Invite to bring people in.');
   }
 
   let opened = false;
@@ -853,6 +871,7 @@
           break;
         case 'deleted':
           leaving = true;
+          forget();
           es.close();
           location.replace('/?n=' + (m.why === 'expired' ? 'expired' : 'deleted'));
           break;

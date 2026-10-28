@@ -4,10 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"html/template"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -19,6 +21,7 @@ const maxLogoBytes = 512 << 10
 type Brand struct {
 	Name    string
 	Version string
+	Mark    template.HTML
 	css     []byte
 	logo    []byte
 	logoCT  string
@@ -51,6 +54,7 @@ func loadBrand(cfg *config.Config) (Brand, error) {
 			return b, err
 		}
 		b.logo, b.logoCT = logo, "image/svg+xml"
+		b.Mark = inlineMark(logo)
 	}
 	b.css = []byte(brandCSS(cfg.Accent))
 	sum := sha256.New()
@@ -145,6 +149,14 @@ func brandCSS(accent string) string {
 		onDark = white
 	}
 	return fmt.Sprintf(`:root{--accent:%s;--accent-ink:%s;--on-accent:%s}
-@media (prefers-color-scheme: dark){:root{--accent:%s;--accent-ink:%s;--on-accent:%s}}
+[data-theme="dark"]{--accent:%s;--accent-ink:%s;--on-accent:%s}
 `, base.hex(), textLight.hex(), onLight.hex(), dark.hex(), dark.hex(), onDark.hex())
+}
+
+var svgStyle = regexp.MustCompile(`<style>.*?</style>`)
+
+func inlineMark(svg []byte) template.HTML {
+	s := svgStyle.ReplaceAllString(string(svg), "")
+	s = strings.Replace(s, "<svg ", `<svg class="mark" width="28" height="28" aria-hidden="true" focusable="false" `, 1)
+	return template.HTML(s)
 }

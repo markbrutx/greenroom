@@ -1,7 +1,7 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/retro.js"}}" defer></script>{{end}}
 {{define "crumbs"}}<button class="code-chip" type="button" data-panel title="Room settings and link">{{.Data.Code}}</button>{{end}}
 {{define "bar"}}<div class="here" id="here" aria-label="Here now"></div>
-<button class="btn btn-sm" type="button" id="share" data-panel aria-label="Share and room settings">Share<span class="badge" id="badge" hidden></span></button>
+<button class="btn btn-sm" type="button" id="share" data-panel aria-label="Invite people and room settings">Invite<span class="badge" id="badge" hidden></span></button>
 <button class="btn btn-sm btn-primary" type="button" id="copy-agent" title="Copy the retro as Markdown for an AI agent"><span class="lbl">Copy for agent</span><span class="lbl-short">Copy</span></button>{{end}}
 {{define "main"}}
 <script type="application/json" id="retro-state">{{.Data}}</script>
@@ -16,7 +16,7 @@
 <div class="knocks" id="knocks" role="region" aria-label="People asking to join" aria-live="polite" hidden></div>
 <dialog class="panel" id="panel" aria-labelledby="panel-title">
 <div class="panel-head"><h2 id="panel-title">Room <span class="code">{{.Data.Code}}</span></h2><button class="icon-btn" type="button" id="panel-close" aria-label="Close">{{icon "close"}}</button></div>
-<p class="welcome" id="welcome" hidden>Your room is ready. Share the link to invite people.</p>
+<p class="welcome" id="welcome" hidden>Your room is ready. Send the link to invite people.</p>
 <section class="psec">
 <h3>Invite</h3>
 <div class="linkrow"><input class="input" id="room-link" readonly aria-label="Room link"><button class="btn btn-primary" type="button" id="copy-link">Copy link</button></div>
