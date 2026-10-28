@@ -1,8 +1,8 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/retro.js"}}" defer></script>{{end}}
 {{define "crumbs"}}<button class="code-chip" type="button" data-panel title="Room settings and link">{{.Data.Code}}</button>{{end}}
 {{define "bar"}}<div class="here" id="here" aria-label="Here now"></div>
-<button class="btn btn-sm" type="button" id="share" data-panel>{{icon "share"}}<span class="lbl">Share</span><span class="badge" id="badge" hidden></span></button>
-<button class="btn btn-sm" type="button" id="copy-agent" title="Copy the retro as Markdown for an AI agent">{{icon "sparkle"}}<span class="lbl">Copy for agent</span></button>
+<button class="btn btn-sm" type="button" id="share" data-panel aria-label="Share and room settings">{{icon "share"}}<span class="lbl">Share</span><span class="badge" id="badge" hidden></span></button>
+<button class="btn btn-sm" type="button" id="copy-agent" title="Copy the retro as Markdown for an AI agent" aria-label="Copy for agent">{{icon "sparkle"}}<span class="lbl">Copy for agent</span></button>
 <a class="icon-btn" id="download" href="/{{.Data.Code}}/export.md?download=1" download title="Download .md" aria-label="Download .md">{{icon "download"}}</a>
 <span class="me" id="me">{{.Data.Me}}</span>{{end}}
 {{define "main"}}

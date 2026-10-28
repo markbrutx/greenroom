@@ -145,7 +145,7 @@ select.owner:focus { outline: none; border-color: var(--accent); }
 }
 .start-copy h1 { font-size: clamp(2rem, 1.4rem + 2.6vw, 3.1rem); font-weight: 700; letter-spacing: -.01em; }
 .start-copy p { margin: 16px 0 0; max-width: 34em; color: var(--muted); font-size: 1.08rem; }
-.start-copy .start-note { font-size: .92rem; color: var(--faint); }
+.start-copy .start-note { font-size: .92rem; }
 .start-forms { display: grid; gap: 18px; }
 .start-card {
   display: grid; gap: 16px; padding: 22px;
