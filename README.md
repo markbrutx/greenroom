@@ -1,35 +1,47 @@
 # Greenroom
 
-A live retro board for small teams, in one self-hosted binary.
+Meet-style retro rooms in one self-hosted binary.
 
-![A retro in Greenroom](docs/img/retro.png)
+![A retro room in Greenroom](docs/img/retro.png)
 
-## Why
+## How it works
 
-A small team needs a retro tool, and later a few other small internal tools,
-without extra features, accounts or a SaaS subscription. Greenroom is one
-binary inside your own network with one shared password: type your name and
-go.
+1. **Create a room.** Type your name and pick who can come in: *Ask to join*
+   (default) or *Open*. You get a link like `https://retro.example.com/abc-defg-hij`.
+2. **Share the link.** People type their name. In an *Ask to join* room you see
+   "Maya wants to join" and click Admit or Deny; they get in without
+   reloading.
+3. **Run the retro.** Warm-up question, board columns from a template set,
+   cards, reactions and actions with an owner, all live.
+4. **Export for your agent.** *Copy for agent* puts the whole retro on the
+   clipboard as Markdown, ready for a prompt; *Download .md* saves it.
+5. **Delete it.** The host deletes the room for everyone. Rooms also delete
+   themselves after 7 days without activity.
+
+No accounts and no passwords. The host can switch the room between open and
+closed, remove people, and open the room as host on another device with a
+private host link.
 
 ## Run
 
 ```sh
-docker run -d -p 8080:8080 -v greenroom:/data -e GREENROOM_PASSWORD='team password' ghcr.io/markbrutx/greenroom
+docker run -d -p 8080:8080 -v greenroom:/data ghcr.io/markbrutx/greenroom
 ```
 
 ```sh
-GREENROOM_PASSWORD='team password' ./greenroom
+./greenroom
 ```
 
-Then open <http://localhost:8080>.
+Then open <http://localhost:8080>. Version 0.3 starts with an empty database;
+see the [changelog](CHANGELOG.md).
 
 ## Config
 
 | Variable | Default | |
 | --- | --- | --- |
-| `GREENROOM_PASSWORD` | required | Shared team password |
 | `GREENROOM_ADDR` | `:8080` | Listen address |
-| `GREENROOM_DATABASE_URL` | `sqlite:greenroom.db` | Or `postgres://user:pass@host/db` |
+| `GREENROOM_DATABASE_URL` | `sqlite:greenroom.db` | SQLite file |
+| `GREENROOM_ROOM_TTL` | `168h` | Delete rooms after this long without activity |
 | `GREENROOM_TRUSTED_PROXIES` | `127.0.0.1,::1` | Proxies allowed to set `X-Forwarded-For` |
 | `GREENROOM_TLS_CERT`, `GREENROOM_TLS_KEY` | | Serve HTTPS directly |
 | `GREENROOM_NAME` | `Greenroom` | Name in the top bar |
@@ -39,6 +51,7 @@ Then open <http://localhost:8080>.
 | `GREENROOM_TEMPLATES` | built-in | Your own [pool.toml](internal/retro/pool.toml) |
 | `GREENROOM_LOG_LEVEL`, `GREENROOM_LOG_FORMAT` | `info`, `text` | Logging |
 
-Production setup: [docs/deploy.md](docs/deploy.md).
+Production setup: [docs/deploy.md](docs/deploy.md). Security notes:
+[SECURITY.md](SECURITY.md).
 
 License: MIT

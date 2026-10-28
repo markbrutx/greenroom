@@ -13,7 +13,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 LABEL org.opencontainers.image.source="https://github.com/markbrutx/greenroom" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.title="Greenroom" \
-      org.opencontainers.image.description="Self-hosted team retrospectives in a single binary"
+      org.opencontainers.image.description="Meet-style retro rooms in a single binary"
 COPY --from=builder --chown=65532:65532 /out/data /data
 COPY --from=builder /out/greenroom /usr/local/bin/greenroom
 ENV GREENROOM_ADDR=:8080 \

@@ -25,16 +25,15 @@ spec:
           type: RuntimeDefault
       containers:
         - name: greenroom
-          image: ghcr.io/markbrutx/greenroom:0.2.0
+          image: ghcr.io/markbrutx/greenroom:0.3.0
           args: ["serve"]
-          envFrom:
-            - secretRef:
-                name: greenroom
           env:
             - name: GREENROOM_DATABASE_URL
               value: sqlite:/data/greenroom.db
             - name: GREENROOM_ADDR
               value: ":8080"
+            - name: GREENROOM_ROOM_TTL
+              value: 168h
           ports:
             - name: http
               containerPort: 8080

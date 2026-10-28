@@ -3,17 +3,13 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 SHA256 := $(shell command -v shasum >/dev/null 2>&1 && echo "shasum -a 256" || echo sha256sum)
 
-.PHONY: run test test-postgres build dist lint docker clean
+.PHONY: run test build dist lint docker clean
 
 run:
 	go run ./cmd/greenroom
 
 test:
 	go test -timeout 90s ./...
-
-test-postgres:
-	@test -n "$(GREENROOM_TEST_POSTGRES_URL)" || { echo "GREENROOM_TEST_POSTGRES_URL is not set" >&2; exit 1; }
-	GREENROOM_TEST_POSTGRES_URL="$(GREENROOM_TEST_POSTGRES_URL)" go test -timeout 90s ./...
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/greenroom ./cmd/greenroom

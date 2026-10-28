@@ -13,10 +13,10 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      GREENROOM_PASSWORD: ${GREENROOM_PASSWORD:?set it}
       GREENROOM_TRUSTED_PROXIES: ${GREENROOM_TRUSTED_PROXIES:-172.16.0.0/12}
       GREENROOM_NAME: ${GREENROOM_NAME:-Greenroom}
       GREENROOM_TZ: ${GREENROOM_TZ:-UTC}
+      GREENROOM_ROOM_TTL: ${GREENROOM_ROOM_TTL:-168h}
     volumes:
       - greenroom-data:/data
 
