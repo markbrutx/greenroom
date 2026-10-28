@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -153,10 +152,7 @@ func brandCSS(accent string) string {
 `, base.hex(), textLight.hex(), onLight.hex(), dark.hex(), dark.hex(), onDark.hex())
 }
 
-var svgStyle = regexp.MustCompile(`<style>.*?</style>`)
-
 func inlineMark(svg []byte) template.HTML {
-	s := svgStyle.ReplaceAllString(string(svg), "")
-	s = strings.Replace(s, "<svg ", `<svg class="mark" width="28" height="28" aria-hidden="true" focusable="false" `, 1)
+	s := strings.Replace(string(svg), "<svg ", `<svg class="mark" width="28" height="28" aria-hidden="true" focusable="false" `, 1)
 	return template.HTML(s)
 }

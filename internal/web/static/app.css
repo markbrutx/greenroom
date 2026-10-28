@@ -117,8 +117,6 @@ button { cursor: pointer; }
 .brand:hover { text-decoration: none; }
 .brand img { width: 28px; height: 28px; border-radius: 8px; object-fit: contain; }
 .mark { display: block; flex: none; }
-.mark .lg-c { fill: var(--ink); }
-.mark .lg-a { fill: var(--bg); stroke: var(--bg); }
 .brand span { display: none; }
 .spacer { flex: 1; }
 .me { display: none; font-size: .9rem; color: var(--muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
