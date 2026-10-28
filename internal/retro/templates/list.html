@@ -1,8 +1,0 @@
-{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}">{{end}}
-{{define "main"}}
-<h1 class="page-title">Retro</h1>
-<form method="post" action="/retro/new"><button class="btn btn-primary" type="submit">+ New retro</button></form>
-<ul class="retro-list" role="list">
-{{range .Data}}<li><a class="retro-row" href="/retro/{{.ID}}"><span class="rr-date">{{.Date}}</span><span class="rr-cols">{{.Cols}}</span><span class="rr-count">{{.Cards}} {{if eq .Cards 1}}card{{else}}cards{{end}}</span></a></li>{{else}}<li class="empty">No retros yet.</li>{{end}}
-</ul>
-{{end}}

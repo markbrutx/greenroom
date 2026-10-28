@@ -8,58 +8,64 @@ import (
 const limiterMaxEntries = 10000
 
 type Limiter struct {
-	max   int
-	block time.Duration
+	max    int
+	window time.Duration
 
 	mu        sync.Mutex
-	entries   map[string]*attempts
+	entries   map[string]*window
 	lastSweep time.Time
 }
 
-type attempts struct {
-	fails int
-	first time.Time
-	until time.Time
+type window struct {
+	hits  int
+	start time.Time
 }
 
-func NewLimiter(max int, block time.Duration) *Limiter {
-	return &Limiter{max: max, block: block, entries: map[string]*attempts{}}
+func NewLimiter(max int, per time.Duration) *Limiter {
+	return &Limiter{max: max, window: per, entries: map[string]*window{}}
 }
 
-func (l *Limiter) Blocked(ip string) (time.Time, bool) {
+func (l *Limiter) Blocked(key string) (time.Time, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
 	l.sweep(now)
-	e := l.entries[ip]
-	if e != nil && e.until.After(now) {
-		return e.until, true
+	e := l.entries[key]
+	if e == nil || now.Sub(e.start) >= l.window || e.hits < l.max {
+		return time.Time{}, false
 	}
-	return time.Time{}, false
+	return e.start.Add(l.window), true
 }
 
-func (l *Limiter) Fail(ip string) {
+func (l *Limiter) Hit(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.hitLocked(key, time.Now())
+}
+
+func (l *Limiter) Allow(key string) (time.Time, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
-	e := l.entries[ip]
-	if e == nil || l.expired(e, now) {
-		if len(l.entries) >= limiterMaxEntries {
-			l.entries = map[string]*attempts{}
-		}
-		e = &attempts{first: now}
-		l.entries[ip] = e
+	l.sweep(now)
+	e := l.entries[key]
+	if e != nil && now.Sub(e.start) < l.window && e.hits >= l.max {
+		return e.start.Add(l.window), false
 	}
-	e.fails++
-	if e.fails >= l.max {
-		e.until = now.Add(l.block)
-	}
+	l.hitLocked(key, now)
+	return time.Time{}, true
 }
 
-func (l *Limiter) Reset(ip string) {
-	l.mu.Lock()
-	delete(l.entries, ip)
-	l.mu.Unlock()
+func (l *Limiter) hitLocked(key string, now time.Time) {
+	e := l.entries[key]
+	if e == nil || now.Sub(e.start) >= l.window {
+		if e == nil && len(l.entries) >= limiterMaxEntries {
+			l.entries = map[string]*window{}
+		}
+		e = &window{start: now}
+		l.entries[key] = e
+	}
+	e.hits++
 }
 
 func (l *Limiter) Len() int {
@@ -68,21 +74,14 @@ func (l *Limiter) Len() int {
 	return len(l.entries)
 }
 
-func (l *Limiter) expired(e *attempts, now time.Time) bool {
-	if !e.until.IsZero() {
-		return !e.until.After(now)
-	}
-	return now.Sub(e.first) > l.block
-}
-
 func (l *Limiter) sweep(now time.Time) {
 	if now.Sub(l.lastSweep) < time.Minute {
 		return
 	}
 	l.lastSweep = now
-	for ip, e := range l.entries {
-		if l.expired(e, now) {
-			delete(l.entries, ip)
+	for k, e := range l.entries {
+		if now.Sub(e.start) >= l.window {
+			delete(l.entries, k)
 		}
 	}
 }

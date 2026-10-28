@@ -1,0 +1,32 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}">{{end}}
+{{define "bodyclass"}}page-start{{end}}
+{{define "main"}}
+{{with .Data.Notice}}<p class="notice" role="status">{{.}}</p>{{end}}
+<section class="start">
+<div class="start-copy">
+<h1>Retro rooms for your team.</h1>
+<p>Create a room, share the link and let people in. When you are done, copy the retro for your AI agent and delete the room.</p>
+<p class="start-note">No accounts. Rooms are deleted after {{.Data.TTL}} without activity.</p>
+</div>
+<div class="start-forms">
+<form class="start-card" method="post" action="/new">
+<h2>New retro</h2>
+<label class="field"><span>Your name</span><input class="input" name="name" autocomplete="name" autocapitalize="words" maxlength="40" value="{{.Data.Name}}" required {{if not .Data.Name}}autofocus{{end}}></label>
+<fieldset class="access">
+<legend>Who can come in</legend>
+<label class="opt"><input type="radio" name="access" value="closed" {{if not .Data.Open}}checked{{end}}><span class="opt-body">{{icon "lock"}}<span><b>Ask to join</b><small>You let each person in</small></span></span></label>
+<label class="opt"><input type="radio" name="access" value="open" {{if .Data.Open}}checked{{end}}><span class="opt-body">{{icon "globe"}}<span><b>Open</b><small>Anyone with the link joins</small></span></span></label>
+</fieldset>
+<button class="btn btn-primary btn-block" type="submit">Create room</button>
+{{with .Data.Err}}<p class="form-error" role="alert">{{.}}</p>{{end}}
+</form>
+<div class="or" aria-hidden="true"><span>or</span></div>
+<form class="join-code" method="get" action="/join">
+<label class="sr" for="code">Room code or link</label>
+<input class="input" id="code" name="code" placeholder="Enter a code or link" autocomplete="off" autocapitalize="none" spellcheck="false" value="{{.Data.Code}}" required>
+<button class="btn" type="submit">Join</button>
+{{with .Data.JoinErr}}<p class="form-error" role="alert">{{.}}</p>{{end}}
+</form>
+</div>
+</section>
+{{end}}

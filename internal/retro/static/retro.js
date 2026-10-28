@@ -3,7 +3,8 @@
 
   const S = JSON.parse(document.getElementById('retro-state').textContent);
   const me = S.me;
-  const rid = S.id;
+  const code = S.code;
+  const base = '/' + code;
   const EMOJI = S.emojis;
   const EVERYONE = 'Everyone';
 
@@ -18,7 +19,8 @@
   const boundTmps = new Set();
   let cols = [];
   let openEl = null;
-  let people = (S.names || []).slice();
+  let members = (S.members || []).slice();
+  let pendingList = (S.pending || []).slice();
   let here = [];
   let toastTimer = 0;
   const fieldSizing = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('field-sizing', 'content');
@@ -31,10 +33,26 @@
     toastTimer = setTimeout(() => t.classList.remove('on'), 3200);
   }
 
-  async function api(body) {
+  let leaving = false;
+  function away(status) {
+    if (leaving) return true;
+    if (status === 404) {
+      leaving = true;
+      location.replace('/?n=deleted');
+      return true;
+    }
+    if (status === 401 || status === 403) {
+      leaving = true;
+      location.replace(base);
+      return true;
+    }
+    return false;
+  }
+
+  async function post(path, body) {
     let r;
     try {
-      r = await fetch('/retro/' + rid + '/do', {
+      r = await fetch(base + path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Greenroom': '1' },
         body: JSON.stringify(body),
@@ -43,9 +61,8 @@
       toast('No connection to the server. Your last change was not saved.');
       throw e;
     }
-    if (r.status === 401) {
-      location.href = '/login?next=' + encodeURIComponent(location.pathname);
-      throw new Error('signed out');
+    if ((r.status === 401 || r.status === 404 || (r.status === 403 && path === '/do')) && away(r.status)) {
+      throw new Error('gone');
     }
     if (!r.ok) {
       const msg = (await r.text()).trim();
@@ -54,6 +71,9 @@
     }
     return r.json().catch(() => ({}));
   }
+
+  function api(body) { return post('/do', body); }
+  function hostApi(body) { return post('/host', body); }
 
   function grow(ta) {
     if (fieldSizing) return;
@@ -73,9 +93,7 @@
   }
 
   function peopleList() {
-    const list = people.slice();
-    here.forEach((n) => { if (!list.includes(n)) list.push(n); });
-    return list.sort((a, b) => a.localeCompare(b));
+    return members.map((m) => m.name).sort((a, b) => a.localeCompare(b));
   }
 
   function option(value, text) {
@@ -488,47 +506,16 @@
       s.textContent = n;
       return s;
     }));
-    for (const el of cards.values()) if (el._c.col === 'a') render(el);
-  }
-
-  function renderCarry(list) {
-    S.carry = list;
-    $('#carry-block').hidden = !list.length;
-    const box = $('#carry');
-    box.replaceChildren();
-    list.forEach((c) => {
-      const li = document.createElement('li');
-      li.id = 'cy-' + c.id;
-      li.className = c.done ? 'done' : '';
-      const label = document.createElement('label');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = c.done;
-      const body = document.createElement('span');
-      body.className = 'carry-body';
-      body.textContent = c.body;
-      const info = document.createElement('span');
-      info.className = 'carry-meta';
-      info.textContent = (c.owner ? c.owner + ' · ' : '') + c.from;
-      label.append(cb, body, info);
-      li.append(label);
-      cb.addEventListener('change', () => {
-        const done = cb.checked;
-        li.classList.toggle('done', done);
-        c.done = done;
-        api({ op: 'done', id: c.id, done }).catch(() => {
-          cb.checked = !done;
-          c.done = !done;
-          li.classList.toggle('done', !done);
-        });
-      });
-      box.append(li);
-    });
+    renderPeople();
   }
 
   function apply(s) {
-    if (s.names) people = s.names.slice();
+    if (s.members) members = s.members.slice();
+    if (s.pending) pendingList = s.pending.slice();
+    S.open = s.open;
     renderHere(s.here || []);
+    renderPanel();
+    renderKnocks();
     meta(s);
     const seen = new Set();
     s.cards.forEach((c) => {
@@ -536,17 +523,13 @@
       upsert(Object.assign({}, c, { r: c.r || {} }));
     });
     for (const id of [...cards.keys()]) if (!seen.has(id)) drop(id);
-    renderCarry(s.carry || []);
     diceState();
   }
 
   async function resync() {
     try {
-      const r = await fetch('/retro/' + rid + '/state', { headers: { 'X-Greenroom': '1' } });
-      if (r.status === 401) {
-        location.href = '/login?next=' + encodeURIComponent(location.pathname);
-        return;
-      }
+      const r = await fetch(base + '/state', { headers: { 'X-Greenroom': '1' } });
+      if (away(r.status)) return;
       if (r.ok) apply(await r.json());
     } catch (e) {}
   }
@@ -588,31 +571,253 @@
   $('#warmup-dice').addEventListener('click', () => api({ op: 'warmup' }).catch(() => {}));
   $('#cols-dice').addEventListener('click', () => api({ op: 'cols' }).catch(() => {}));
 
-  $('#copy').addEventListener('click', async () => {
-    const url = '/retro/' + rid + '/export.md';
+  const panel = $('#panel');
+  const roomLink = location.origin + base;
+  const hostLink = S.hostSecret ? roomLink + '?host=' + encodeURIComponent(S.hostSecret) : '';
+  $('#room-link').value = roomLink;
+  $('#host-link').value = hostLink;
+  document.querySelectorAll('.host-only').forEach((e) => { e.hidden = !S.host; });
+  document.querySelectorAll('.guest-only').forEach((e) => { e.hidden = !!S.host; });
+
+  function openPanel() {
+    if (panel.open) return;
+    resetDelete();
+    if (panel.showModal) panel.showModal();
+    else panel.setAttribute('open', '');
+  }
+
+  function closePanel() {
+    $('#welcome').hidden = true;
+    if (panel.close) panel.close();
+    else panel.removeAttribute('open');
+  }
+
+  document.querySelectorAll('[data-panel]').forEach((b) => b.addEventListener('click', openPanel));
+  $('#panel-close').addEventListener('click', closePanel);
+  panel.addEventListener('click', (e) => { if (e.target === panel) closePanel(); });
+
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.className = 'offscreen';
+    (panel.open ? panel : document.body).append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  async function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {}
+    }
+    return fallbackCopy(text);
+  }
+
+  async function copyInput(input, done) {
+    if (await copyText(input.value)) {
+      toast(done);
+      return;
+    }
+    input.focus();
+    input.select();
+    toast('Press Ctrl+C or Cmd+C to copy.');
+  }
+
+  $('#copy-link').addEventListener('click', () => copyInput($('#room-link'), 'Link copied. Send it to your team.'));
+  $('#copy-host').addEventListener('click', () => copyInput($('#host-link'), 'Host link copied. Keep it private.'));
+  ['#room-link', '#host-link'].forEach((sel) => $(sel).addEventListener('focus', (e) => e.target.select()));
+
+  async function copyForAgent() {
+    const url = base + '/export.md';
     const load = () => fetch(url, { headers: { 'X-Greenroom': '1' } }).then((r) => {
+      if (away(r.status)) throw new Error('gone');
       if (!r.ok) throw new Error('export failed');
       return r.text();
     });
     try {
-      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write && window.isSecureContext) {
         const blob = load().then((t) => new Blob([t], { type: 'text/plain' }));
         await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
-      } else {
-        await navigator.clipboard.writeText(await load());
+      } else if (!fallbackCopy(await load())) {
+        throw new Error('copy failed');
       }
-      toast('Summary copied as Markdown.');
+      toast('Retro copied as Markdown. Paste it into your agent.');
     } catch (e) {
-      location.href = url + '?download=1';
+      if (!leaving) location.href = url + '?download=1';
     }
+  }
+  $('#copy-agent').addEventListener('click', copyForAgent);
+  $('#copy-agent-2').addEventListener('click', copyForAgent);
+
+  document.querySelectorAll('input[name=access]').forEach((r) => r.addEventListener('change', () => {
+    const open = r.value === 'open' && r.checked;
+    const before = S.open;
+    S.open = open;
+    renderPanel();
+    hostApi({ op: 'access', open }).then(() => {
+      toast(open ? 'The room is open. Anyone with the link joins.' : 'People now ask to join.');
+    }).catch(() => {
+      S.open = before;
+      renderPanel();
+    });
+  }));
+
+  function renderPeople() {
+    const box = $('#people');
+    const list = members.slice().sort((a, b) => (b.host ? 1 : 0) - (a.host ? 1 : 0) || a.name.localeCompare(b.name));
+    $('#people-count').textContent = String(list.length);
+    box.replaceChildren(...list.map((m) => {
+      const li = document.createElement('li');
+      const dot = document.createElement('span');
+      dot.className = 'dot' + (here.includes(m.name) ? ' on' : '');
+      dot.title = here.includes(m.name) ? 'In the room' : 'Away';
+      const name = document.createElement('span');
+      name.className = 'pname';
+      name.textContent = m.name;
+      li.append(dot, name);
+      if (m.host) {
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = 'Host';
+        li.append(tag);
+      }
+      if (m.id === S.meId) {
+        const tag = document.createElement('span');
+        tag.className = 'tag soft';
+        tag.textContent = 'You';
+        li.append(tag);
+      }
+      if (S.host && !m.host) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm btn-quiet';
+        b.textContent = 'Remove';
+        b.setAttribute('aria-label', 'Remove ' + m.name);
+        b.addEventListener('click', () => {
+          b.disabled = true;
+          hostApi({ op: 'remove', id: m.id }).then(() => toast(m.name + ' was removed.')).catch(() => { b.disabled = false; });
+        });
+        li.append(b);
+      }
+      return li;
+    }));
+  }
+
+  function renderPanel() {
+    document.querySelectorAll('input[name=access]').forEach((r) => { r.checked = (r.value === 'open') === !!S.open; });
+    $('#access-hint').textContent = S.open
+      ? 'Open room: anyone with the link joins right away.'
+      : (S.host ? 'People who open the link ask to join, and you let them in.' : 'People who open the link ask to join, and the host lets them in.');
+    renderPeople();
+  }
+
+  function resetDelete() {
+    $('#delete-row').hidden = false;
+    $('#delete-confirm').hidden = true;
+  }
+  $('#delete').addEventListener('click', () => {
+    $('#delete-row').hidden = true;
+    $('#delete-confirm').hidden = false;
+    $('#delete-cancel').focus();
   });
+  $('#delete-cancel').addEventListener('click', () => {
+    resetDelete();
+    $('#delete').focus();
+  });
+  $('#delete-yes').addEventListener('click', () => {
+    $('#delete-yes').disabled = true;
+    hostApi({ op: 'delete' }).then(() => {
+      leaving = true;
+      location.replace('/?n=deleted');
+    }).catch(() => { $('#delete-yes').disabled = false; });
+  });
+
+  const knocks = $('#knocks');
+
+  function knockRows() {
+    const items = pendingList.map((p) => {
+      const row = document.createElement('div');
+      row.className = 'knock';
+      const text = document.createElement('span');
+      text.className = 'knock-text';
+      const b = document.createElement('b');
+      b.textContent = p.name;
+      text.append(b, ' wants to join');
+      const deny = document.createElement('button');
+      deny.type = 'button';
+      deny.className = 'btn btn-sm';
+      deny.textContent = 'Deny';
+      deny.setAttribute('aria-label', 'Deny ' + p.name);
+      const admit = document.createElement('button');
+      admit.type = 'button';
+      admit.className = 'btn btn-sm btn-primary';
+      admit.textContent = 'Admit';
+      admit.setAttribute('aria-label', 'Admit ' + p.name);
+      const act = (op) => {
+        deny.disabled = true;
+        admit.disabled = true;
+        hostApi({ op, id: p.id }).catch(() => { deny.disabled = false; admit.disabled = false; });
+      };
+      deny.addEventListener('click', () => act('deny'));
+      admit.addEventListener('click', () => act('admit'));
+      row.append(text, deny, admit);
+      return row;
+    });
+    if (pendingList.length > 1) {
+      const all = document.createElement('div');
+      all.className = 'knock knock-all';
+      const label = document.createElement('span');
+      label.className = 'knock-text';
+      label.textContent = pendingList.length + ' people are waiting';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-sm btn-primary';
+      b.textContent = 'Admit all';
+      b.addEventListener('click', () => {
+        b.disabled = true;
+        hostApi({ op: 'admitall' }).catch(() => { b.disabled = false; });
+      });
+      all.append(label, b);
+      items.push(all);
+    }
+    return items;
+  }
+
+  function renderKnocks() {
+    const badge = $('#badge');
+    const any = S.host && pendingList.length > 0;
+    badge.hidden = !any;
+    badge.textContent = String(pendingList.length);
+    $('#waiting-sec').hidden = !any;
+    $('#waiting-count').textContent = String(pendingList.length);
+    knocks.hidden = !any;
+    knocks.replaceChildren(...(any ? knockRows() : []));
+    $('#waiting').replaceChildren(...(any ? knockRows() : []));
+  }
+
+  if (S.welcome) {
+    history.replaceState(null, '', base);
+    $('#welcome').hidden = false;
+    openPanel();
+  }
 
   let opened = false;
   function connect() {
-    const es = new EventSource('/retro/' + rid + '/events');
+    const es = new EventSource(base + '/events');
     es.onopen = () => {
       if (opened) resync();
       opened = true;
+    };
+    es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED) {
+        setTimeout(() => { resync().then(() => { if (!leaving) connect(); }); }, 1500);
+      }
     };
     es.onmessage = (e) => {
       const m = JSON.parse(e.data);
@@ -628,15 +833,29 @@
           renderReacts(el);
           break;
         }
-        case 'carry': {
-          const li = document.getElementById('cy-' + m.id);
-          if (!li) break;
-          li.classList.toggle('done', m.done);
-          $('input', li).checked = m.done;
-          const c = (S.carry || []).find((x) => x.id === m.id);
-          if (c) c.done = m.done;
+        case 'members':
+          members = m.members.slice();
+          renderPanel();
+          for (const el of cards.values()) if (el._c.col === 'a') render(el);
           break;
-        }
+        case 'lobby':
+          pendingList = m.pending.slice();
+          renderKnocks();
+          break;
+        case 'access':
+          S.open = m.open;
+          renderPanel();
+          break;
+        case 'removed':
+          leaving = true;
+          es.close();
+          location.replace(base);
+          break;
+        case 'deleted':
+          leaving = true;
+          es.close();
+          location.replace('/?n=' + (m.why === 'expired' ? 'expired' : 'deleted'));
+          break;
       }
     };
   }

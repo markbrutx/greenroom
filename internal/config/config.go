@@ -16,8 +16,8 @@ type Config struct {
 	TLSCert     string
 	TLSKey      string
 
-	Password       string
 	TrustedProxies []netip.Prefix
+	RoomTTL        time.Duration
 
 	Name      string
 	Logo      string
@@ -45,7 +45,6 @@ func Parse(get func(string) string) (*Config, error) {
 		DatabaseURL: env("DATABASE_URL", "sqlite:greenroom.db"),
 		TLSCert:     env("TLS_CERT", ""),
 		TLSKey:      env("TLS_KEY", ""),
-		Password:    get("GREENROOM_PASSWORD"),
 		Name:        env("NAME", "Greenroom"),
 		Logo:        env("LOGO", ""),
 		Accent:      env("ACCENT", ""),
@@ -70,8 +69,13 @@ func Parse(get func(string) string) (*Config, error) {
 	}
 	c.TZ = tz
 
-	if strings.TrimSpace(c.Password) == "" {
-		return nil, errors.New("GREENROOM_PASSWORD is required: the shared team password")
+	ttl, err := time.ParseDuration(env("ROOM_TTL", "168h"))
+	if err != nil || ttl < time.Minute {
+		return nil, fmt.Errorf("GREENROOM_ROOM_TTL: %q is not a duration of at least 1m, for example 168h", env("ROOM_TTL", ""))
+	}
+	c.RoomTTL = ttl
+	if !strings.HasPrefix(c.DatabaseURL, "sqlite:") {
+		return nil, errors.New("GREENROOM_DATABASE_URL must start with sqlite:, for example sqlite:/data/greenroom.db")
 	}
 	if c.Accent != "" && !hexColor.MatchString(c.Accent) {
 		return nil, fmt.Errorf("GREENROOM_ACCENT: %q is not a #rrggbb color", c.Accent)

@@ -17,232 +17,209 @@ func newRepo(t *testing.T) *Repo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Migrate(context.Background(), Slug, sub); err != nil {
+	if err := db.Migrate(context.Background(), "rooms", sub); err != nil {
 		t.Fatal(err)
 	}
 	return NewRepo(db)
 }
 
-func TestCreateAndLoadRetro(t *testing.T) {
-	r := newRepo(t)
-	ctx := context.Background()
-	id, err := r.CreateRetro(ctx, "How was it?", []string{"Good", "Bad"})
+func newRoom(t *testing.T, r *Repo, code string, open bool) (*Room, *Member) {
+	t.Helper()
+	room, host, err := r.CreateRoom(context.Background(), code, "secret-"+code, open, "How was it?", []string{"Good", "Bad"}, "Maya")
 	if err != nil {
 		t.Fatal(err)
 	}
-	x, err := r.Retro(ctx, id)
-	if err != nil {
-		t.Fatal(err)
+	return room, host
+}
+
+func TestCodes(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		c, err := NewCode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ValidCode(c) {
+			t.Fatalf("bad code %q", c)
+		}
+		seen[c] = true
 	}
-	if x.Warmup != "How was it?" || strings.Join(x.Cols, "|") != "Good|Bad" {
-		t.Fatalf("unexpected retro: %+v", x)
+	if len(seen) < 199 {
+		t.Fatalf("codes repeat too often: %d unique of 200", len(seen))
 	}
-	if _, err := r.Retro(ctx, id+100); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("missing retro: got %v", err)
+	cases := map[string]string{
+		"abc-defg-hij":                           "abc-defg-hij",
+		"  ABC-DEFG-HIJ ":                        "abc-defg-hij",
+		"abcdefghij":                             "abc-defg-hij",
+		"https://retro.example.com/abc-defg-hij": "abc-defg-hij",
+		"https://retro.example.com/abc-defg-hij?host=x": "abc-defg-hij",
+		"/abc-defg-hij": "abc-defg-hij",
 	}
-	list, err := r.List(ctx, 10)
-	if err != nil || len(list) != 1 || strings.Join(list[0].Cols, "|") != "Good|Bad" {
-		t.Fatalf("list: %v %+v", err, list)
+	for in, want := range cases {
+		if got, ok := ParseCode(in); !ok || got != want {
+			t.Errorf("ParseCode(%q) = %q %v, want %q", in, got, ok, want)
+		}
+	}
+	for _, bad := range []string{"", "abc", "abc-defg-hi1", "abc_defg_hij", "../etc/passwd"} {
+		if _, ok := ParseCode(bad); ok {
+			t.Errorf("ParseCode(%q) must fail", bad)
+		}
 	}
 }
 
-func TestCardVersionGrowsOnEveryUpdate(t *testing.T) {
+func TestCreateRoomAndCodeClash(t *testing.T) {
 	r := newRepo(t)
 	ctx := context.Background()
-	id, _ := r.CreateRetro(ctx, "q", []string{"A"})
-	c, err := r.AddCard(ctx, id, "a", "alice")
+	room, host := newRoom(t, r, "abc-defg-hij", false)
+	if !host.Host || host.Status != Admitted || host.Name != "Maya" {
+		t.Fatalf("host member: %+v", host)
+	}
+	got, err := r.RoomByCode(ctx, "abc-defg-hij")
+	if err != nil || got.ID != room.ID || got.Open || strings.Join(got.Cols, "|") != "Good|Bad" || got.HostSecret != "secret-abc-defg-hij" {
+		t.Fatalf("room: %v %+v", err, got)
+	}
+	if _, _, err := r.CreateRoom(ctx, "abc-defg-hij", "x", true, "q", []string{"A"}, "Sam"); !errors.Is(err, ErrCodeTaken) {
+		t.Fatalf("a taken code must be refused: %v", err)
+	}
+	if _, err := r.RoomByCode(ctx, "zzz-zzzz-zzz"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing room: %v", err)
+	}
+}
+
+func TestJoinNamesAndStatus(t *testing.T) {
+	r := newRepo(t)
+	ctx := context.Background()
+	room, _ := newRoom(t, r, "abc-defg-hij", false)
+	if _, err := r.Join(ctx, room.ID, 0, "maya", Pending); !errors.Is(err, ErrNameTaken) {
+		t.Fatalf("names are unique without case: %v", err)
+	}
+	jonas, err := r.Join(ctx, room.ID, 0, "Jonas", Pending)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Ver != 0 || c.Author != "alice" || c.Col != "a" {
-		t.Fatalf("new card: %+v", c)
+	if _, err := r.SetStatus(ctx, room.ID, jonas.ID, Admitted, Removed); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a pending member cannot be removed: %v", err)
 	}
-	c1, err := r.SetText(ctx, id, c.ID, "Write docs")
+	denied, err := r.SetStatus(ctx, room.ID, jonas.ID, Pending, Denied)
+	if err != nil || denied.Status != Denied {
+		t.Fatalf("deny: %v %+v", err, denied)
+	}
+	other, err := r.Join(ctx, room.ID, 0, "JONAS", Pending)
+	if err != nil {
+		t.Fatalf("a denied name is free again: %v", err)
+	}
+	if _, err := r.Join(ctx, room.ID, jonas.ID, "Jonas", Pending); !errors.Is(err, ErrNameTaken) {
+		t.Fatalf("asking again under a name now in use: %v", err)
+	}
+	again, err := r.Join(ctx, room.ID, jonas.ID, "Jonas B", Pending)
+	if err != nil || again.ID != jonas.ID {
+		t.Fatalf("ask again keeps the member: %v %+v", err, again)
+	}
+	ids, err := r.AdmitAll(ctx, room.ID)
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("admit all: %v %v", err, ids)
+	}
+	members, _ := r.Members(ctx, room.ID, Admitted)
+	if len(members) != 3 || !members[0].Host || members[1].ID != other.ID || members[2].Name != "Jonas B" {
+		t.Fatalf("members, host first then by name: %+v", members)
+	}
+	host, _ := r.HostMember(ctx, room.ID)
+	if _, err := r.SetStatus(ctx, room.ID, host.ID, Admitted, Removed); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("the host cannot be removed: %v", err)
+	}
+	second, _ := newRoom(t, r, "xyz-defg-hij", true)
+	if _, err := r.Member(ctx, second.ID, jonas.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a member of one room is not a member of another: %v", err)
+	}
+}
+
+func TestRoomFull(t *testing.T) {
+	r := newRepo(t)
+	ctx := context.Background()
+	room, _ := newRoom(t, r, "abc-defg-hij", false)
+	for i := 1; i < maxMembers; i++ {
+		if _, err := r.Join(ctx, room.ID, 0, "guest "+strings.Repeat("x", i), Pending); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.Join(ctx, room.ID, 0, "one more", Pending); !errors.Is(err, ErrFull) {
+		t.Fatalf("room must be full: %v", err)
+	}
+}
+
+func TestCardsAndHardDelete(t *testing.T) {
+	r := newRepo(t)
+	ctx := context.Background()
+	room, _ := newRoom(t, r, "abc-defg-hij", false)
+	c, err := r.AddCard(ctx, room.ID, "a", "Maya")
+	if err != nil || c.Ver != 0 {
+		t.Fatalf("add: %v %+v", err, c)
+	}
+	c1, err := r.SetText(ctx, room.ID, c.ID, "Write docs")
 	if err != nil || c1.Ver != 1 || c1.Body != "Write docs" {
 		t.Fatalf("text: %v %+v", err, c1)
 	}
-	c2, err := r.SetOwner(ctx, id, c.ID, "bob")
-	if err != nil || c2.Ver != 2 || c2.Owner != "bob" || c2.Body != "Write docs" {
+	c2, err := r.SetOwner(ctx, room.ID, c.ID, "Jonas")
+	if err != nil || c2.Ver != 2 || c2.Owner != "Jonas" {
 		t.Fatalf("owner: %v %+v", err, c2)
 	}
-	c3, err := r.SetText(ctx, id, c.ID, "Write the docs")
-	if err != nil || c3.Ver != 3 || c3.Owner != "bob" {
-		t.Fatalf("text again: %v %+v", err, c3)
+	board, _ := r.AddCard(ctx, room.ID, "0", "Maya")
+	if _, err := r.SetOwner(ctx, room.ID, board.ID, "Jonas"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("owner on a board card: %v", err)
 	}
-	other, _ := r.CreateRetro(ctx, "q", []string{"A"})
-	if _, err := r.SetText(ctx, other, c.ID, "x"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("text through another retro: %v", err)
+	other, _ := newRoom(t, r, "xyz-defg-hij", false)
+	if _, err := r.SetText(ctx, other.ID, c.ID, "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("text through another room: %v", err)
 	}
-	board, _ := r.AddCard(ctx, id, "0", "alice")
-	if _, err := r.SetOwner(ctx, id, board.ID, "bob"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("owner on a board card must fail: %v", err)
+	if _, err := r.React(ctx, other.ID, c.ID, "Maya", "👍", true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("react through another room: %v", err)
 	}
-	if err := r.DeleteCard(ctx, id, c.ID); err != nil {
+	if changed, err := r.React(ctx, room.ID, c.ID, "Maya", "👍", true); err != nil || !changed {
+		t.Fatalf("react: %v %v", err, changed)
+	}
+	if changed, _ := r.React(ctx, room.ID, c.ID, "Maya", "👍", true); changed {
+		t.Fatal("a second identical reaction changes nothing")
+	}
+	cards, _ := r.Cards(ctx, room.ID)
+	if len(cards) != 2 || len(cards[0].R["👍"]) != 1 {
+		t.Fatalf("cards: %+v", cards)
+	}
+	if n, _ := r.BoardCardCount(ctx, room.ID); n != 1 {
+		t.Fatalf("board count: %d", n)
+	}
+	if err := r.DeleteCard(ctx, room.ID, c.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.SetText(ctx, id, c.ID, "x"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("text on deleted card: %v", err)
-	}
-	if err := r.DeleteCard(ctx, id, c.ID); !errors.Is(err, ErrNotFound) {
+	if err := r.DeleteCard(ctx, room.ID, c.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("second delete: %v", err)
 	}
+	if err := r.DeleteRoom(ctx, room.ID); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	r.db.QueryRow(ctx, `select (select count(*) from cards where room_id = ?) + (select count(*) from members where room_id = ?) + (select count(*) from reactions)`, room.ID, room.ID).Scan(&left)
+	if left != 0 {
+		t.Fatalf("deleting a room must remove its members, cards and reactions, %d rows left", left)
+	}
 }
 
-func TestReactionsAreIdempotent(t *testing.T) {
+func TestIdleRooms(t *testing.T) {
 	r := newRepo(t)
 	ctx := context.Background()
-	id, _ := r.CreateRetro(ctx, "q", []string{"A"})
-	c, _ := r.AddCard(ctx, id, "0", "alice")
-	r.SetText(ctx, id, c.ID, "Nice")
-
-	steps := []struct {
-		who, emoji  string
-		on, changed bool
-	}{
-		{"bob", "👍", true, true},
-		{"bob", "👍", true, false},
-		{"carol", "👍", true, true},
-		{"bob", "🎉", true, true},
-		{"bob", "🎉", false, true},
-		{"bob", "🎉", false, false},
-	}
-	for i, s := range steps {
-		changed, err := r.React(ctx, id, c.ID, s.who, s.emoji, s.on)
-		if err != nil {
-			t.Fatalf("step %d: %v", i, err)
-		}
-		if changed != s.changed {
-			t.Fatalf("step %d: changed=%v want %v", i, changed, s.changed)
-		}
-	}
-	cards, err := r.Cards(ctx, id)
-	if err != nil {
+	old, _ := newRoom(t, r, "abc-defg-hij", false)
+	fresh, _ := newRoom(t, r, "xyz-defg-hij", false)
+	if err := r.SetActiveAt(ctx, old.ID, 1000); err != nil {
 		t.Fatal(err)
 	}
-	got := cards[0].R
-	if len(got["👍"]) != 2 || len(got["🎉"]) != 0 {
-		t.Fatalf("reactions: %#v", got)
+	idle, err := r.Idle(ctx, 2000)
+	if err != nil || len(idle) != 1 || idle[0].ID != old.ID {
+		t.Fatalf("idle: %v %+v", err, idle)
 	}
-
-	other, _ := r.CreateRetro(ctx, "q", []string{"A"})
-	if _, err := r.React(ctx, other, c.ID, "bob", "👍", true); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("react through another retro: %v", err)
-	}
-	r.DeleteCard(ctx, id, c.ID)
-	if _, err := r.React(ctx, id, c.ID, "bob", "❤️", true); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("react on deleted card: %v", err)
-	}
-}
-
-func TestCarryOverAndDone(t *testing.T) {
-	r := newRepo(t)
-	ctx := context.Background()
-	first, _ := r.CreateRetro(ctx, "q", []string{"A"})
-	keep, _ := r.AddCard(ctx, first, "a", "alice")
-	r.SetText(ctx, first, keep.ID, "Fix the build")
-	empty, _ := r.AddCard(ctx, first, "a", "alice")
-	finish, _ := r.AddCard(ctx, first, "a", "alice")
-	r.SetText(ctx, first, finish.ID, "Update docs")
-	_ = empty
-
-	second, _ := r.CreateRetro(ctx, "q", []string{"A"})
-	carry, err := r.Carry(ctx, second)
-	if err != nil {
+	if err := r.Touch(ctx, old.ID); err != nil {
 		t.Fatal(err)
 	}
-	if len(carry) != 2 {
-		t.Fatalf("carry: %+v", carry)
+	if idle, _ := r.Idle(ctx, 2000); len(idle) != 0 {
+		t.Fatal("a touch makes the room active again")
 	}
-	if err := r.SetCarryDone(ctx, second, finish.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.SetCarryDone(ctx, first, keep.ID, true); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("done from the same retro must fail: %v", err)
-	}
-	carry, _ = r.Carry(ctx, second)
-	if len(carry) != 2 || !carry[1].Done {
-		t.Fatalf("done action stays visible where it was ticked: %+v", carry)
-	}
-
-	third, _ := r.CreateRetro(ctx, "q", []string{"A"})
-	carry, _ = r.Carry(ctx, third)
-	if len(carry) != 1 || carry[0].ID != keep.ID {
-		t.Fatalf("later retro sees only unfinished actions: %+v", carry)
-	}
-}
-
-func TestColumnsAndWarmup(t *testing.T) {
-	r := newRepo(t)
-	ctx := context.Background()
-	id, _ := r.CreateRetro(ctx, "q", []string{"A", "B"})
-	if err := r.SetCols(ctx, id, []string{"Keep", "Drop"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.SetWarmup(ctx, id, "Another?"); err != nil {
-		t.Fatal(err)
-	}
-	x, _ := r.Retro(ctx, id)
-	if x.Warmup != "Another?" || x.Cols[1] != "Drop" {
-		t.Fatalf("retro: %+v", x)
-	}
-	if err := r.SetWarmup(ctx, id+99, "x"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("warm-up on missing retro: %v", err)
-	}
-	if n, _ := r.BoardCardCount(ctx, id); n != 0 {
-		t.Fatalf("board count %d", n)
-	}
-	r.AddCard(ctx, id, "a", "x")
-	r.AddCard(ctx, id, "w", "x")
-	r.AddCard(ctx, id, "1", "x")
-	if n, _ := r.BoardCardCount(ctx, id); n != 1 {
-		t.Fatalf("board count ignores warm-up and actions, got %d", n)
-	}
-}
-
-func TestMarkdownExport(t *testing.T) {
-	s := &State{
-		Warmup: "One word?",
-		Cols:   []string{"Good", "Bad"},
-		Cards: []Card{
-			{ID: 1, Col: "w", Author: "alice", Body: "Calm"},
-			{ID: 2, Col: "0", Author: "bob", Body: "Fast\nreviews", R: map[string][]string{"👍": {"a", "b", "c"}, "❤️": {"a"}}},
-			{ID: 3, Col: "a", Author: "bob", Body: "Pair more", Owner: "Everyone"},
-			{ID: 4, Col: "1", Author: "bob", Body: "  "},
-		},
-		Carry: []Carry{{ID: 9, Body: "Old thing", Owner: "carol", Done: true, FromStr: "Oct 1"}},
-	}
-	md := Markdown(s, "2026-10-24")
-	for _, want := range []string{
-		"# Retro 2026-10-24",
-		"## Warm-up: One word?",
-		"- **alice**: Calm",
-		"- [x] Old thing (carol, from Oct 1)",
-		"- Fast reviews (bob)  👍3 ❤️1",
-		"## Bad\n\n_Nothing here._",
-		"- [ ] Pair more (Everyone)",
-	} {
-		if !strings.Contains(md, want) {
-			t.Errorf("export lacks %q:\n%s", want, md)
-		}
-	}
-}
-
-func TestPoolValidation(t *testing.T) {
-	p, err := LoadPool("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(p.Sets) < 15 || len(p.Warmups) < 60 {
-		t.Fatalf("pool too small: %d sets, %d warm-ups", len(p.Sets), len(p.Warmups))
-	}
-	cur := p.Sets[0].Columns
-	for i := 0; i < 20; i++ {
-		if strings.Join(p.RandomSet(cur).Columns, "|") == strings.Join(cur, "|") {
-			t.Fatal("random set repeated the current one")
-		}
-	}
-	bad := &Pool{Warmups: []string{"q"}, Sets: []ColumnSet{{Name: "x", Columns: []string{}}}}
-	if bad.validate() == nil {
-		t.Fatal("a set without columns must be rejected")
-	}
+	_ = fresh
 }

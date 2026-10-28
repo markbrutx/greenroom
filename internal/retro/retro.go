@@ -27,88 +27,185 @@ var staticFS embed.FS
 var defaultPool []byte
 
 const (
-	Slug       = "retro"
 	Everyone   = "Everyone"
 	maxBody    = 2000
 	maxTitle   = 80
 	maxWarmup  = 300
 	maxColumns = 6
-	listLimit  = 300
+	sweepEvery = time.Hour
 )
 
 var Emojis = []string{"👍", "❤️", "😂", "🎉", "🤔", "😮"}
 
-type Tool struct {
-	pool  *Pool
-	repo  *Repo
-	locks *Locks
-	app   *web.App
+type Limits struct {
+	Create *auth.Limiter
+	Join   *auth.Limiter
+	Lookup *auth.Limiter
+}
 
-	listT *template.Template
+func DefaultLimits() Limits {
+	return Limits{
+		Create: auth.NewLimiter(20, time.Hour),
+		Join:   auth.NewLimiter(60, 10*time.Minute),
+		Lookup: auth.NewLimiter(20, 15*time.Minute),
+	}
+}
+
+type Service struct {
+	pool   *Pool
+	repo   *Repo
+	locks  *Locks
+	app    *web.App
+	auth   *auth.Auth
+	limits Limits
+
+	homeT *template.Template
+	joinT *template.Template
 	roomT *template.Template
+	goneT *template.Template
 }
 
-func New(pool *Pool) *Tool {
-	return &Tool{pool: pool, locks: NewLocks()}
-}
-
-func (t *Tool) Info() web.ToolInfo {
-	return web.ToolInfo{Slug: Slug, Name: "Retro"}
-}
-
-func (t *Tool) Mount(app *web.App) error {
-	t.app = app
-	t.repo = NewRepo(app.DB)
+func New(app *web.App, a *auth.Auth, pool *Pool, limits Limits) (*Service, error) {
+	s := &Service{pool: pool, locks: NewLocks(), app: app, auth: a, limits: limits, repo: NewRepo(app.DB)}
 	mig, err := fs.Sub(migrationFS, "migrations")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := app.DB.Migrate(context.Background(), Slug, mig); err != nil {
-		return err
+	if err := app.DB.Migrate(context.Background(), "rooms", mig); err != nil {
+		return nil, err
 	}
 	static, err := fs.Sub(staticFS, "static")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := app.AddStatic(Slug, static); err != nil {
-		return err
+	if err := app.AddStatic("retro", static); err != nil {
+		return nil, err
 	}
 	for name, dst := range map[string]**template.Template{
-		"templates/list.html": &t.listT, "templates/room.html": &t.roomT,
+		"templates/home.html": &s.homeT, "templates/join.html": &s.joinT,
+		"templates/room.html": &s.roomT, "templates/gone.html": &s.goneT,
 	} {
 		if *dst, err = app.Templates(templateFS, name); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	app.Page("GET /retro", t.list)
-	app.Page("POST /retro/new", t.create)
-	app.Page("GET /retro/{id}", t.room)
-	app.API("GET /retro/{id}/state", t.stateJSON)
-	app.API("GET /retro/{id}/events", t.events)
-	app.API("POST /retro/{id}/do", t.do)
-	app.API("GET /retro/{id}/export.md", t.export)
-	return nil
+	app.HandleFunc("GET /{$}", s.home)
+	app.HandleFunc("GET /join", s.findRoom)
+	app.HandleFunc("POST /new", s.create)
+	app.Handle("/", http.HandlerFunc(s.dispatch))
+	return s, nil
 }
 
-func (t *Tool) when(ms int64) time.Time { return time.UnixMilli(ms).In(t.app.Cfg.TZ) }
+func (s *Service) Repo() *Repo { return s.repo }
 
-func (t *Tool) day(ms int64) string {
-	at := t.when(ms)
-	if at.Year() == time.Now().In(t.app.Cfg.TZ).Year() {
-		return at.Format("Jan 2")
+func (s *Service) dispatch(w http.ResponseWriter, r *http.Request) {
+	code, action, _ := cutPath(r.URL.Path)
+	if !ValidCode(code) {
+		s.lookupMiss(w, r)
+		return
 	}
-	return at.Format("Jan 2, 2006")
+	switch {
+	case action == "" && (r.Method == http.MethodGet || r.Method == http.MethodHead):
+		s.page(w, r, code)
+	case action == "join" && r.Method == http.MethodPost:
+		s.join(w, r, code)
+	case action == "events" && r.Method == http.MethodGet:
+		s.events(w, r, code)
+	case action == "state" && r.Method == http.MethodGet:
+		s.api(w, r, code, s.stateJSON)
+	case action == "do" && r.Method == http.MethodPost:
+		s.api(w, r, code, s.do)
+	case action == "host" && r.Method == http.MethodPost:
+		s.api(w, r, code, s.hostOp)
+	case action == "export.md" && r.Method == http.MethodGet:
+		s.api(w, r, code, s.export)
+	case action == "join" || action == "events" || action == "state" || action == "do" || action == "host" || action == "export.md" || action == "":
+		w.Header().Set("Allow", allowFor(action))
+		http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
+	default:
+		http.NotFound(w, r)
+	}
 }
 
-func (t *Tool) fullDate(ms int64) string { return t.when(ms).Format("Mon, Jan 2, 2006") }
-
-func (t *Tool) isoDate(ms int64) string { return t.when(ms).Format("2006-01-02") }
-
-func room(id int64) string { return "retro:" + strconv.FormatInt(id, 10) }
-
-func retroID(r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	return id, err == nil && id > 0
+func allowFor(action string) string {
+	switch action {
+	case "join", "do", "host":
+		return http.MethodPost
+	}
+	return http.MethodGet
 }
 
-func me(r *http.Request) string { return auth.User(r.Context()) }
+func cutPath(p string) (code, action string, ok bool) {
+	if len(p) < 2 || p[0] != '/' {
+		return "", "", false
+	}
+	p = p[1:]
+	for i := 0; i < len(p); i++ {
+		if p[i] == '/' {
+			return p[:i], p[i+1:], true
+		}
+	}
+	return p, "", true
+}
+
+func (s *Service) Janitor(ctx context.Context) {
+	s.Sweep(ctx)
+	tick := time.NewTicker(sweepEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			s.Sweep(ctx)
+		}
+	}
+}
+
+func (s *Service) Sweep(ctx context.Context) int {
+	before := time.Now().Add(-s.app.Cfg.RoomTTL).UnixMilli()
+	idle, err := s.repo.Idle(ctx, before)
+	if err != nil {
+		s.app.Log.Error("find idle rooms", "err", err)
+		return 0
+	}
+	n := 0
+	for _, x := range idle {
+		if err := s.repo.DeleteRoom(ctx, x.ID); err != nil {
+			s.app.Log.Error("delete idle room", "err", err, "room", x.Code)
+			continue
+		}
+		s.app.Hub.CloseRoom(topic(x.Code), map[string]any{"t": "deleted", "why": "expired"})
+		n++
+	}
+	if n > 0 {
+		s.app.Log.Info("idle rooms deleted", "count", n, "ttl", s.app.Cfg.RoomTTL.String())
+	}
+	return n
+}
+
+func (s *Service) when(ms int64) time.Time { return time.UnixMilli(ms).In(s.app.Cfg.TZ) }
+
+func (s *Service) fullDate(ms int64) string { return s.when(ms).Format("Mon, Jan 2, 2006") }
+
+func (s *Service) isoDate(ms int64) string { return s.when(ms).Format("2006-01-02") }
+
+func (s *Service) ttlText() string {
+	ttl := s.app.Cfg.RoomTTL
+	plural := func(n int, unit string) string {
+		if n == 1 {
+			return "1 " + unit
+		}
+		return strconv.Itoa(n) + " " + unit + "s"
+	}
+	switch {
+	case ttl >= 24*time.Hour && ttl%(24*time.Hour) == 0:
+		return plural(int(ttl/(24*time.Hour)), "day")
+	case ttl >= time.Hour && ttl%time.Hour == 0:
+		return plural(int(ttl/time.Hour), "hour")
+	default:
+		return plural(int((ttl+time.Minute-1)/time.Minute), "minute")
+	}
+}
+
+func topic(code string) string { return "room:" + code }

@@ -8,146 +8,270 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/markbrutx/greenroom/internal/auth"
+	"github.com/markbrutx/greenroom/internal/live"
 	"github.com/markbrutx/greenroom/internal/web"
 )
 
-type listRow struct {
-	ID    int64
-	Date  string
-	Cols  string
-	Cards int
-}
-
 type State struct {
-	ID      int64    `json:"id"`
-	Date    string   `json:"date"`
-	Warmup  string   `json:"warmup"`
-	Cols    []string `json:"cols"`
-	Cards   []Card   `json:"cards"`
-	Carry   []Carry  `json:"carry"`
-	Me      string   `json:"me"`
-	Names   []string `json:"names"`
-	Here    []string `json:"here"`
-	Emojis  []string `json:"emojis"`
-	created int64
+	Code       string   `json:"code"`
+	Date       string   `json:"date"`
+	Warmup     string   `json:"warmup"`
+	Cols       []string `json:"cols"`
+	Cards      []Card   `json:"cards"`
+	Me         string   `json:"me"`
+	MeID       int64    `json:"meId"`
+	Host       bool     `json:"host"`
+	Open       bool     `json:"open"`
+	Members    []Member `json:"members"`
+	Pending    []Member `json:"pending,omitempty"`
+	HostSecret string   `json:"hostSecret,omitempty"`
+	Here       []string `json:"here"`
+	Emojis     []string `json:"emojis"`
+	TTL        string   `json:"ttl"`
+	Welcome    bool     `json:"welcome,omitempty"`
+	created    int64
 }
 
-func (t *Tool) fail(w http.ResponseWriter, status int, msg string) {
-	http.Error(w, msg, status)
-}
+type roomHandler func(w http.ResponseWriter, r *http.Request, room *Room, m *Member)
 
-func (t *Tool) dbFail(w http.ResponseWriter, r *http.Request, err error) {
-	t.app.Log.Error("retro database", "err", err, "path", r.URL.Path)
-	t.fail(w, http.StatusInternalServerError, "The database did not answer. Try again in a moment.")
-}
+func fail(w http.ResponseWriter, status int, msg string) { http.Error(w, msg, status) }
 
-func (t *Tool) list(w http.ResponseWriter, r *http.Request) {
-	rows, err := t.repo.List(r.Context(), listLimit)
-	if err != nil {
-		t.dbFail(w, r, err)
+func (s *Service) api(w http.ResponseWriter, r *http.Request, code string, h roomHandler) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(auth.APIHeader) != "1" {
+		fail(w, http.StatusForbidden, "Missing the "+auth.APIHeader+" request header.")
 		return
 	}
-	out := make([]listRow, 0, len(rows))
-	for _, x := range rows {
-		out = append(out, listRow{ID: x.ID, Date: t.fullDate(x.CreatedAt), Cols: strings.Join(x.Cols, " · "), Cards: x.Cards})
-	}
-	t.app.Render(w, r, t.listT, web.View{Title: "Retro", Data: out})
-}
-
-func (t *Tool) create(w http.ResponseWriter, r *http.Request) {
-	set := t.pool.Sets[0]
-	id, err := t.repo.CreateRetro(r.Context(), t.pool.RandomWarmup(""), set.Columns)
-	if err != nil {
-		t.dbFail(w, r, err)
+	if _, blocked := s.limits.Lookup.Blocked(s.ip(r)); blocked {
+		fail(w, http.StatusTooManyRequests, "Too many unknown room codes from your network.")
 		return
 	}
-	t.app.Log.Info("retro created", "id", id, "by", me(r))
-	http.Redirect(w, r, "/retro/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	room, err := s.repo.RoomByCode(r.Context(), code)
+	if errors.Is(err, ErrNotFound) {
+		s.limits.Lookup.Hit(s.ip(r))
+		fail(w, http.StatusNotFound, "This room was deleted.")
+		return
+	}
+	if err != nil {
+		s.dbFail(w, r, err)
+		return
+	}
+	id, ok := s.auth.Member(r, code)
+	if !ok {
+		fail(w, http.StatusUnauthorized, "Join the room first.")
+		return
+	}
+	m, err := s.repo.Member(r.Context(), room.ID, id)
+	if errors.Is(err, ErrNotFound) {
+		fail(w, http.StatusUnauthorized, "Join the room first.")
+		return
+	}
+	if err != nil {
+		s.dbFail(w, r, err)
+		return
+	}
+	if m.Status != Admitted {
+		fail(w, http.StatusForbidden, "You are not in this room.")
+		return
+	}
+	h(w, r, room, m)
 }
 
-func (t *Tool) load(r *http.Request, id int64) (*State, error) {
+func (s *Service) load(r *http.Request, room *Room, m *Member) (*State, error) {
 	ctx := r.Context()
-	x, err := t.repo.Retro(ctx, id)
+	cards, err := s.repo.Cards(ctx, room.ID)
 	if err != nil {
 		return nil, err
 	}
-	cards, err := t.repo.Cards(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	carry, err := t.repo.Carry(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	names, err := t.app.Auth.People(ctx)
+	members, err := s.repo.Members(ctx, room.ID, Admitted)
 	if err != nil {
 		return nil, err
 	}
 	for i := range cards {
-		t.locks.Decorate(&cards[i])
+		s.locks.Decorate(room.ID, &cards[i])
 	}
-	for i := range carry {
-		carry[i].FromStr = t.day(carry[i].From)
+	st := &State{
+		Code: room.Code, Date: s.fullDate(room.CreatedAt), Warmup: room.Warmup, Cols: room.Cols, Cards: cards,
+		Me: m.Name, MeID: m.ID, Host: m.Host, Open: room.Open, Members: members,
+		Here: s.app.Hub.Here(topic(room.Code)), Emojis: Emojis, TTL: s.ttlText(), created: room.CreatedAt,
 	}
-	return &State{
-		ID: id, Date: t.fullDate(x.CreatedAt), Warmup: x.Warmup, Cols: x.Cols, Cards: cards, Carry: carry,
-		Me: me(r), Names: names, Here: t.app.Hub.Here(room(id)), Emojis: Emojis, created: x.CreatedAt,
-	}, nil
+	if m.Host {
+		st.HostSecret = room.HostSecret
+		if st.Pending, err = s.repo.Members(ctx, room.ID, Pending); err != nil {
+			return nil, err
+		}
+	}
+	return st, nil
 }
 
-func (t *Tool) room(w http.ResponseWriter, r *http.Request) {
-	id, ok := retroID(r)
-	if !ok {
-		http.NotFound(w, r)
+func (s *Service) room(w http.ResponseWriter, r *http.Request, room *Room, m *Member) {
+	st, err := s.load(r, room, m)
+	if err != nil {
+		s.dbFail(w, r, err)
 		return
 	}
-	s, err := t.load(r, id)
+	st.Welcome = m.Host && r.URL.Query().Get("welcome") == "1"
+	s.repo.Touch(r.Context(), room.ID)
+	s.repo.Seen(r.Context(), m.ID)
+	s.app.Render(w, r, s.roomT, web.View{Title: "Retro " + room.Code, Data: st})
+}
+
+func (s *Service) stateJSON(w http.ResponseWriter, r *http.Request, room *Room, m *Member) {
+	st, err := s.load(r, room, m)
+	if err != nil {
+		s.dbFail(w, r, err)
+		return
+	}
+	writeJSON(w, st)
+}
+
+func (s *Service) events(w http.ResponseWriter, r *http.Request, code string) {
+	room, err := s.repo.RoomByCode(r.Context(), code)
 	if errors.Is(err, ErrNotFound) {
-		t.fail(w, http.StatusNotFound, "This retro does not exist.")
+		s.limits.Lookup.Hit(s.ip(r))
+		fail(w, http.StatusNotFound, "This room was deleted.")
 		return
 	}
 	if err != nil {
-		t.dbFail(w, r, err)
+		s.dbFail(w, r, err)
 		return
 	}
-	t.app.Render(w, r, t.roomT, web.View{Title: "Retro " + t.day(s.created),
-		Crumbs: []web.Crumb{{Label: "Retro", Href: "/retro"}, {Label: t.day(s.created)}}, Data: s})
-}
-
-func (t *Tool) stateJSON(w http.ResponseWriter, r *http.Request) {
-	id, ok := retroID(r)
+	id, ok := s.auth.Member(r, code)
 	if !ok {
-		http.NotFound(w, r)
+		fail(w, http.StatusUnauthorized, "Join the room first.")
 		return
 	}
-	s, err := t.load(r, id)
-	if errors.Is(err, ErrNotFound) {
-		t.fail(w, http.StatusNotFound, "This retro does not exist.")
+	m, err := s.repo.Member(r.Context(), room.ID, id)
+	if err != nil || (m.Status != Admitted && m.Status != Pending) {
+		fail(w, http.StatusForbidden, "You are not in this room.")
 		return
 	}
-	if err != nil {
-		t.dbFail(w, r, err)
-		return
-	}
-	writeJSON(w, s)
-}
-
-func (t *Tool) events(w http.ResponseWriter, r *http.Request) {
-	id, ok := retroID(r)
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	if _, err := t.repo.Retro(r.Context(), id); err != nil {
-		t.fail(w, http.StatusNotFound, "This retro does not exist.")
-		return
-	}
-	t.app.Hub.Serve(w, r, room(id), me(r))
+	s.repo.Seen(r.Context(), m.ID)
+	s.app.Hub.Serve(w, r, topic(code), live.Peer{ID: m.ID, Name: m.Name, Host: m.Host, Waiting: m.Status == Pending})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+func (s *Service) sendMembers(r *http.Request, room *Room) {
+	members, err := s.repo.Members(r.Context(), room.ID, Admitted)
+	if err != nil {
+		s.app.Log.Error("list members", "err", err)
+		return
+	}
+	s.app.Hub.Send(topic(room.Code), map[string]any{"t": "members", "members": members})
+}
+
+func (s *Service) sendLobby(r *http.Request, room *Room) {
+	pending, err := s.repo.Members(r.Context(), room.ID, Pending)
+	if err != nil {
+		s.app.Log.Error("list pending", "err", err)
+		return
+	}
+	s.app.Hub.SendHosts(topic(room.Code), map[string]any{"t": "lobby", "pending": pending})
+}
+
+type hostReq struct {
+	Op   string `json:"op"`
+	ID   int64  `json:"id"`
+	Open bool   `json:"open"`
+}
+
+func (s *Service) hostOp(w http.ResponseWriter, r *http.Request, room *Room, m *Member) {
+	if !m.Host {
+		fail(w, http.StatusForbidden, "Only the host can do that.")
+		return
+	}
+	var o hostReq
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&o); err != nil {
+		fail(w, http.StatusBadRequest, "The request is not valid JSON.")
+		return
+	}
+	ctx := r.Context()
+	hub := s.app.Hub
+	tp := topic(room.Code)
+	gone := func(err error, msg string) {
+		if errors.Is(err, ErrNotFound) {
+			fail(w, http.StatusNotFound, msg)
+			return
+		}
+		s.dbFail(w, r, err)
+	}
+	switch o.Op {
+	case "admit":
+		x, err := s.repo.SetStatus(ctx, room.ID, o.ID, Pending, Admitted)
+		if err != nil {
+			gone(err, "This person is no longer waiting.")
+			return
+		}
+		hub.SendPeer(tp, x.ID, map[string]any{"t": "admitted"})
+		s.sendMembers(r, room)
+		s.sendLobby(r, room)
+	case "admitall":
+		ids, err := s.repo.AdmitAll(ctx, room.ID)
+		if err != nil {
+			s.dbFail(w, r, err)
+			return
+		}
+		for _, id := range ids {
+			hub.SendPeer(tp, id, map[string]any{"t": "admitted"})
+		}
+		s.sendMembers(r, room)
+		s.sendLobby(r, room)
+	case "deny":
+		x, err := s.repo.SetStatus(ctx, room.ID, o.ID, Pending, Denied)
+		if err != nil {
+			gone(err, "This person is no longer waiting.")
+			return
+		}
+		hub.Kick(tp, x.ID, map[string]any{"t": "denied"})
+		s.sendLobby(r, room)
+	case "remove":
+		x, err := s.repo.SetStatus(ctx, room.ID, o.ID, Admitted, Removed)
+		if err != nil {
+			gone(err, "This person is not in the room.")
+			return
+		}
+		s.app.Log.Info("member removed", "room", room.Code, "member", x.ID)
+		hub.Kick(tp, x.ID, map[string]any{"t": "removed"})
+		s.sendMembers(r, room)
+	case "access":
+		if err := s.repo.SetOpen(ctx, room.ID, o.Open); err != nil {
+			s.dbFail(w, r, err)
+			return
+		}
+		hub.Send(tp, map[string]any{"t": "access", "open": o.Open})
+		if o.Open {
+			ids, err := s.repo.AdmitAll(ctx, room.ID)
+			if err != nil {
+				s.dbFail(w, r, err)
+				return
+			}
+			for _, id := range ids {
+				hub.SendPeer(tp, id, map[string]any{"t": "admitted"})
+			}
+			if len(ids) > 0 {
+				s.sendMembers(r, room)
+				s.sendLobby(r, room)
+			}
+		}
+	case "delete":
+		if err := s.repo.DeleteRoom(ctx, room.ID); err != nil {
+			gone(err, "This room was already deleted.")
+			return
+		}
+		s.app.Log.Info("room deleted", "room", room.Code)
+		hub.CloseRoom(tp, map[string]any{"t": "deleted", "why": "host"})
+		writeJSON(w, map[string]any{})
+		return
+	default:
+		fail(w, http.StatusBadRequest, "Unknown host action "+strconv.Quote(o.Op)+".")
+		return
+	}
+	s.repo.Touch(ctx, room.ID)
+	writeJSON(w, map[string]any{})
 }
 
 type op struct {
@@ -158,7 +282,6 @@ type op struct {
 	Text  string `json:"text"`
 	Seq   int64  `json:"seq"`
 	Final bool   `json:"final"`
-	Done  bool   `json:"done"`
 	Tmp   string `json:"tmp"`
 	Emoji string `json:"emoji"`
 	On    bool   `json:"on"`
@@ -183,146 +306,137 @@ func validEmoji(e string) bool {
 	return false
 }
 
-func (t *Tool) do(w http.ResponseWriter, r *http.Request) {
-	id, ok := retroID(r)
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
+func (s *Service) do(w http.ResponseWriter, r *http.Request, x *Room, m *Member) {
 	var o op
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&o); err != nil {
-		t.fail(w, http.StatusBadRequest, "The request is not valid JSON.")
+		fail(w, http.StatusBadRequest, "The request is not valid JSON.")
 		return
 	}
 	ctx := r.Context()
-	x, err := t.repo.Retro(ctx, id)
-	if errors.Is(err, ErrNotFound) {
-		t.fail(w, http.StatusNotFound, "This retro does not exist.")
-		return
-	}
-	if err != nil {
-		t.dbFail(w, r, err)
-		return
-	}
-	u := me(r)
-	hub := t.app.Hub
-	rm := room(id)
+	u := m.Name
+	hub := s.app.Hub
+	rm := topic(x.Code)
+	id := x.ID
+	lockKey := strconv.FormatInt(m.ID, 10)
 	sendMeta := func() {
 		hub.Send(rm, map[string]any{"t": "meta", "cols": x.Cols, "warmup": x.Warmup})
 	}
 	cardErr := func(err error) {
 		if errors.Is(err, ErrNotFound) {
-			t.fail(w, http.StatusNotFound, "This card was deleted.")
+			fail(w, http.StatusNotFound, "This card was deleted.")
 			return
 		}
-		t.dbFail(w, r, err)
+		s.dbFail(w, r, err)
 	}
+	s.repo.Touch(ctx, id)
 
 	switch o.Op {
 	case "add":
 		if !validCol(o.Col, len(x.Cols)) {
-			t.fail(w, http.StatusBadRequest, "This retro has no column "+strconv.Quote(o.Col)+".")
+			fail(w, http.StatusBadRequest, "This retro has no column "+strconv.Quote(o.Col)+".")
 			return
 		}
 		if o.Tmp != "" && !tmpPattern.MatchString(o.Tmp) {
-			t.fail(w, http.StatusBadRequest, "The client card id must be 1 to 40 letters, digits, - or _.")
+			fail(w, http.StatusBadRequest, "The client card id must be 1 to 40 letters, digits, - or _.")
 			return
 		}
-		c, err := t.repo.AddCard(ctx, id, o.Col, u)
+		c, err := s.repo.AddCard(ctx, id, o.Col, u)
 		if err != nil {
-			t.dbFail(w, r, err)
+			s.dbFail(w, r, err)
 			return
 		}
-		t.locks.Take(c.ID, u)
-		t.locks.Decorate(&c)
+		s.locks.Take(cardKey{id, c.ID}, lockKey, u)
+		s.locks.Decorate(id, &c)
 		hub.Send(rm, map[string]any{"t": "card", "c": c, "tmp": o.Tmp})
 		writeJSON(w, map[string]any{"c": c, "tmp": o.Tmp})
 		return
 
 	case "text":
-		verdict, holder := t.locks.BeginWrite(o.ID, u, o.Seq, o.Final)
+		verdict, holder := s.locks.BeginWrite(cardKey{id, o.ID}, lockKey, u, o.Seq, o.Final)
 		switch verdict {
 		case writeStale:
 			writeJSON(w, map[string]any{"stale": true})
 			return
 		case writeLocked:
-			t.fail(w, http.StatusConflict, holder+" is typing in this card right now.")
+			fail(w, http.StatusConflict, holder+" is typing in this card right now.")
 			return
 		}
-		c, err := t.repo.SetText(ctx, id, o.ID, clip(o.Text, maxBody))
+		c, err := s.repo.SetText(ctx, id, o.ID, clip(o.Text, maxBody))
 		if err != nil {
-			t.locks.Release(o.ID)
+			s.locks.Release(cardKey{id, o.ID})
 			cardErr(err)
 			return
 		}
-		t.locks.Decorate(&c)
+		s.locks.Decorate(id, &c)
 		hub.Send(rm, map[string]any{"t": "card", "c": c})
 
 	case "del":
-		if holder, _ := t.locks.Holder(o.ID, u); holder != "" {
-			t.fail(w, http.StatusConflict, holder+" is typing in this card right now.")
+		if holder, _ := s.locks.Holder(cardKey{id, o.ID}, lockKey); holder != "" {
+			fail(w, http.StatusConflict, holder+" is typing in this card right now.")
 			return
 		}
-		if err := t.repo.DeleteCard(ctx, id, o.ID); err != nil {
+		if err := s.repo.DeleteCard(ctx, id, o.ID); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				writeJSON(w, map[string]any{})
 				return
 			}
-			t.dbFail(w, r, err)
+			s.dbFail(w, r, err)
 			return
 		}
-		t.locks.Release(o.ID)
+		s.locks.Release(cardKey{id, o.ID})
 		hub.Send(rm, map[string]any{"t": "del", "id": o.ID})
 
 	case "owner":
 		owner := strings.TrimSpace(o.Text)
-		if owner != "" && owner != Everyone && !t.app.Auth.Known(ctx, owner) {
-			t.fail(w, http.StatusBadRequest, strconv.Quote(owner)+" has not signed in during the last 90 days.")
-			return
+		if owner != "" && owner != Everyone {
+			members, err := s.repo.Members(ctx, id, Admitted)
+			if err != nil {
+				s.dbFail(w, r, err)
+				return
+			}
+			known := false
+			for _, p := range members {
+				if p.Name == owner {
+					known = true
+				}
+			}
+			if !known {
+				fail(w, http.StatusBadRequest, strconv.Quote(owner)+" is not in this room.")
+				return
+			}
 		}
-		c, err := t.repo.SetOwner(ctx, id, o.ID, owner)
+		c, err := s.repo.SetOwner(ctx, id, o.ID, owner)
 		if err != nil {
 			cardErr(err)
 			return
 		}
-		t.locks.Decorate(&c)
+		s.locks.Decorate(id, &c)
 		hub.Send(rm, map[string]any{"t": "card", "c": c})
-
-	case "done":
-		if err := t.repo.SetCarryDone(ctx, id, o.ID, o.Done); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				t.fail(w, http.StatusNotFound, "This action is not on the list from earlier retros.")
-				return
-			}
-			t.dbFail(w, r, err)
-			return
-		}
-		hub.Send(rm, map[string]any{"t": "carry", "id": o.ID, "done": o.Done})
 
 	case "react":
 		if !validEmoji(o.Emoji) {
-			t.fail(w, http.StatusBadRequest, "Reactions are limited to "+strings.Join(Emojis, " ")+".")
+			fail(w, http.StatusBadRequest, "Reactions are limited to "+strings.Join(Emojis, " ")+".")
 			return
 		}
-		if _, err := t.repo.React(ctx, id, o.ID, u, o.Emoji, o.On); err != nil {
+		if _, err := s.repo.React(ctx, id, o.ID, u, o.Emoji, o.On); err != nil {
 			cardErr(err)
 			return
 		}
 		hub.Send(rm, map[string]any{"t": "react", "id": o.ID, "emoji": o.Emoji, "who": u, "on": o.On})
 
 	case "cols":
-		n, err := t.repo.BoardCardCount(ctx, id)
+		n, err := s.repo.BoardCardCount(ctx, id)
 		if err != nil {
-			t.dbFail(w, r, err)
+			s.dbFail(w, r, err)
 			return
 		}
 		if n > 0 {
-			t.fail(w, http.StatusConflict, "The columns already have cards, so the set stays. Click a column title to rename it.")
+			fail(w, http.StatusConflict, "The columns already have cards, so the set stays. Click a column title to rename it.")
 			return
 		}
-		x.Cols = append([]string(nil), t.pool.RandomSet(x.Cols).Columns...)
-		if err := t.repo.SetCols(ctx, id, x.Cols); err != nil {
-			t.dbFail(w, r, err)
+		x.Cols = append([]string(nil), s.pool.RandomSet(x.Cols).Columns...)
+		if err := s.repo.SetCols(ctx, id, x.Cols); err != nil {
+			s.dbFail(w, r, err)
 			return
 		}
 		sendMeta()
@@ -330,24 +444,24 @@ func (t *Tool) do(w http.ResponseWriter, r *http.Request) {
 	case "col":
 		text := clip(strings.TrimSpace(o.Text), maxTitle)
 		if o.I < 0 || o.I >= len(x.Cols) {
-			t.fail(w, http.StatusBadRequest, "This retro has no column number "+strconv.Itoa(o.I+1)+".")
+			fail(w, http.StatusBadRequest, "This retro has no column number "+strconv.Itoa(o.I+1)+".")
 			return
 		}
 		if text == "" {
-			t.fail(w, http.StatusBadRequest, "A column title cannot be empty.")
+			fail(w, http.StatusBadRequest, "A column title cannot be empty.")
 			return
 		}
 		x.Cols[o.I] = text
-		if err := t.repo.SetCols(ctx, id, x.Cols); err != nil {
-			t.dbFail(w, r, err)
+		if err := s.repo.SetCols(ctx, id, x.Cols); err != nil {
+			s.dbFail(w, r, err)
 			return
 		}
 		sendMeta()
 
 	case "warmup":
-		x.Warmup = t.pool.RandomWarmup(x.Warmup)
-		if err := t.repo.SetWarmup(ctx, id, x.Warmup); err != nil {
-			t.dbFail(w, r, err)
+		x.Warmup = s.pool.RandomWarmup(x.Warmup)
+		if err := s.repo.SetWarmup(ctx, id, x.Warmup); err != nil {
+			s.dbFail(w, r, err)
 			return
 		}
 		sendMeta()
@@ -355,18 +469,18 @@ func (t *Tool) do(w http.ResponseWriter, r *http.Request) {
 	case "warmuptext":
 		text := clip(strings.TrimSpace(o.Text), maxWarmup)
 		if text == "" {
-			t.fail(w, http.StatusBadRequest, "The warm-up question cannot be empty.")
+			fail(w, http.StatusBadRequest, "The warm-up question cannot be empty.")
 			return
 		}
 		x.Warmup = text
-		if err := t.repo.SetWarmup(ctx, id, x.Warmup); err != nil {
-			t.dbFail(w, r, err)
+		if err := s.repo.SetWarmup(ctx, id, x.Warmup); err != nil {
+			s.dbFail(w, r, err)
 			return
 		}
 		sendMeta()
 
 	default:
-		t.fail(w, http.StatusBadRequest, "Unknown action "+strconv.Quote(o.Op)+".")
+		fail(w, http.StatusBadRequest, "Unknown action "+strconv.Quote(o.Op)+".")
 		return
 	}
 	writeJSON(w, map[string]any{})

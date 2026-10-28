@@ -13,15 +13,12 @@
 {{block "head" .}}{{end}}
 </head>
 <body class="{{block "bodyclass" .}}{{end}}">
-{{if .User}}<header class="topbar">
+<header class="topbar">
 <a class="brand" href="/"><img src="/brand/logo?v={{.Brand.Version}}" alt="" width="28" height="28"><span>{{.Brand.Name}}</span></a>
-{{with .Tools}}<nav class="tools" aria-label="Tools">{{range .}}<a href="/{{.Slug}}">{{.Name}}</a>{{end}}</nav>{{end}}
-{{with .Crumbs}}<nav class="crumbs" aria-label="Breadcrumb">{{range .}}<span class="sep" aria-hidden="true">/</span>{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span aria-current="page">{{.Label}}</span>{{end}}{{end}}</nav>{{end}}
+{{block "crumbs" .}}{{end}}
 <span class="spacer"></span>
 {{block "bar" .}}{{end}}
-<span class="me">{{.User}}</span>
-<form class="logout" method="post" action="/logout"><button class="icon-btn" type="submit" aria-label="Sign out" title="Sign out">{{icon "logout"}}</button></form>
-</header>{{end}}
+</header>
 <main class="wrap" id="main">{{block "main" .}}{{end}}</main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>

@@ -12,6 +12,7 @@ const (
 )
 
 type lockEntry struct {
+	key   string
 	who   string
 	until time.Time
 }
@@ -21,26 +22,28 @@ type seqEntry struct {
 	seen time.Time
 }
 
+type cardKey struct{ room, card int64 }
+
 type Locks struct {
 	mu    sync.Mutex
-	locks map[int64]lockEntry
+	locks map[cardKey]lockEntry
 	seqs  map[string]seqEntry
 	swept time.Time
 }
 
 func NewLocks() *Locks {
-	return &Locks{locks: map[int64]lockEntry{}, seqs: map[string]seqEntry{}}
+	return &Locks{locks: map[cardKey]lockEntry{}, seqs: map[string]seqEntry{}}
 }
 
-func (l *Locks) Holder(card int64, me string) (string, time.Duration) {
+func (l *Locks) Holder(card cardKey, key string) (string, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.holderLocked(card, me, time.Now())
+	return l.holderLocked(card, key, time.Now())
 }
 
-func (l *Locks) holderLocked(card int64, me string, now time.Time) (string, time.Duration) {
+func (l *Locks) holderLocked(card cardKey, key string, now time.Time) (string, time.Duration) {
 	e, ok := l.locks[card]
-	if !ok || e.who == me {
+	if !ok || e.key == key {
 		return "", 0
 	}
 	left := e.until.Sub(now)
@@ -50,13 +53,13 @@ func (l *Locks) holderLocked(card int64, me string, now time.Time) (string, time
 	return e.who, left
 }
 
-func (l *Locks) Take(card int64, who string) {
+func (l *Locks) Take(card cardKey, key, who string) {
 	l.mu.Lock()
-	l.locks[card] = lockEntry{who, time.Now().Add(lockTTL)}
+	l.locks[card] = lockEntry{key, who, time.Now().Add(lockTTL)}
 	l.mu.Unlock()
 }
 
-func (l *Locks) Release(card int64) {
+func (l *Locks) Release(card cardKey) {
 	l.mu.Lock()
 	delete(l.locks, card)
 	l.mu.Unlock()
@@ -70,31 +73,31 @@ const (
 	writeLocked
 )
 
-func (l *Locks) BeginWrite(card int64, who string, seq int64, final bool) (writeVerdict, string) {
+func (l *Locks) BeginWrite(card cardKey, key, who string, seq int64, final bool) (writeVerdict, string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
 	l.sweepLocked(now)
-	key := strconv.FormatInt(card, 10) + "\x00" + who
-	if seq <= l.seqs[key].n {
+	seqKey := strconv.FormatInt(card.room, 10) + "\x00" + strconv.FormatInt(card.card, 10) + "\x00" + key
+	if seq <= l.seqs[seqKey].n {
 		return writeStale, ""
 	}
-	if holder, _ := l.holderLocked(card, who, now); holder != "" {
+	if holder, _ := l.holderLocked(card, key, now); holder != "" {
 		return writeLocked, holder
 	}
-	l.seqs[key] = seqEntry{seq, now}
+	l.seqs[seqKey] = seqEntry{seq, now}
 	if final {
 		delete(l.locks, card)
 	} else {
-		l.locks[card] = lockEntry{who, now.Add(lockTTL)}
+		l.locks[card] = lockEntry{key, who, now.Add(lockTTL)}
 	}
 	return writeOK, ""
 }
 
-func (l *Locks) Decorate(c *Card) {
+func (l *Locks) Decorate(room int64, c *Card) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	e, ok := l.locks[c.ID]
+	e, ok := l.locks[cardKey{room, c.ID}]
 	if !ok {
 		return
 	}

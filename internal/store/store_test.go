@@ -2,25 +2,16 @@ package store_test
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
 	"github.com/markbrutx/greenroom/internal/store"
 	"github.com/markbrutx/greenroom/internal/storetest"
+	_ "modernc.org/sqlite"
 )
-
-func TestRebind(t *testing.T) {
-	pg := &store.DB{Dialect: store.Postgres}
-	got := pg.Rebind(`select '?' , a from t where a = ? and b in (?, ?)`)
-	want := `select '?' , a from t where a = $1 and b in ($2, $3)`
-	if got != want {
-		t.Fatalf("got %q want %q", got, want)
-	}
-	lite := &store.DB{Dialect: store.SQLite}
-	if q := lite.Rebind("a = ?"); q != "a = ?" {
-		t.Fatalf("sqlite rebind changed the query: %q", q)
-	}
-}
 
 func TestStatements(t *testing.T) {
 	got := store.Statements("create table a (x int);\n\n-- note\ncreate index i on a (x)\n  where x > 0;\nselect 1")
@@ -33,8 +24,8 @@ func TestMigrateOnceAndInOrder(t *testing.T) {
 	db := storetest.Open(t)
 	ctx := context.Background()
 	fsys := fstest.MapFS{
-		"0002_more.sql": {Data: []byte("alter table things add column n bigint not null default 0;")},
-		"0001_init.sql": {Data: []byte("create table things (id {{ID}}, ok {{BOOL}} not null default {{FALSE}}, at bigint not null);")},
+		"0002_more.sql": {Data: []byte("alter table things add column n integer not null default 0;")},
+		"0001_init.sql": {Data: []byte("create table things (id integer primary key autoincrement, ok integer not null default 0, at integer not null);")},
 	}
 	for i := 0; i < 2; i++ {
 		if err := db.Migrate(ctx, "demo", fsys); err != nil {
@@ -65,5 +56,26 @@ func TestMigrateRejectsBadNames(t *testing.T) {
 	err := db.Migrate(context.Background(), "bad", fstest.MapFS{"init.sql": {Data: []byte("select 1;")}})
 	if err == nil {
 		t.Fatal("a migration without a number must be rejected")
+	}
+}
+
+func TestOpenRejectsOtherURLs(t *testing.T) {
+	if _, err := store.Open(context.Background(), "postgres://localhost/greenroom"); err == nil {
+		t.Fatal("only sqlite: URLs are accepted")
+	}
+}
+
+func TestOpenRefusesLegacyDatabase(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "old.db")
+	raw, err := sql.Open("sqlite", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`create table retros (id integer primary key)`); err != nil {
+		t.Fatal(err)
+	}
+	raw.Close()
+	if _, err := store.Open(context.Background(), "sqlite:"+file); !errors.Is(err, store.ErrLegacy) {
+		t.Fatalf("a 0.2 database must be refused, got %v", err)
 	}
 }

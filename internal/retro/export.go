@@ -1,37 +1,58 @@
 package retro
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
-func (t *Tool) export(w http.ResponseWriter, r *http.Request) {
-	id, ok := retroID(r)
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	s, err := t.load(r, id)
-	if errors.Is(err, ErrNotFound) {
-		t.fail(w, http.StatusNotFound, "This retro does not exist.")
-		return
-	}
+func (s *Service) export(w http.ResponseWriter, r *http.Request, room *Room, m *Member) {
+	st, err := s.load(r, room, m)
 	if err != nil {
-		t.dbFail(w, r, err)
+		s.dbFail(w, r, err)
 		return
 	}
+	date := s.isoDate(st.created)
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	if r.URL.Query().Get("download") == "1" {
-		w.Header().Set("Content-Disposition", `attachment; filename="retro-`+t.isoDate(s.created)+`.md"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="retro-`+date+`-`+room.Code+`.md"`)
 	}
-	w.Write([]byte(Markdown(s, t.isoDate(s.created))))
+	w.Write([]byte(Markdown(st, date)))
+}
+
+func Participants(s *State) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(name, label string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, label)
+	}
+	for _, p := range s.Members {
+		if p.Host {
+			add(p.Name, p.Name+" (host)")
+		}
+	}
+	for _, p := range s.Members {
+		add(p.Name, p.Name)
+	}
+	for _, c := range s.Cards {
+		if strings.TrimSpace(c.Body) != "" {
+			add(c.Author, c.Author)
+		}
+	}
+	return out
 }
 
 func Markdown(s *State, date string) string {
 	var b strings.Builder
-	b.WriteString("# Retro " + date + "\n")
+	b.WriteString("# Team retro, " + date + "\n\n")
+	people := Participants(s)
+	b.WriteString("Participants (" + strconv.Itoa(len(people)) + "): " + strings.Join(people, ", ") + "\n\n")
+	b.WriteString("Notes from a team retrospective. Each card shows its author in parentheses; " +
+		"emoji with a number are reaction counts from the team. Actions list the owner when one was picked.\n")
 
 	byCol := map[string][]Card{}
 	for _, c := range s.Cards {
@@ -45,22 +66,7 @@ func Markdown(s *State, date string) string {
 		b.WriteString("_No answers._\n")
 	}
 	for _, c := range byCol["w"] {
-		b.WriteString("- **" + c.Author + "**: " + oneLine(c.Body) + reactionSuffix(c) + "\n")
-	}
-
-	if len(s.Carry) > 0 {
-		b.WriteString("\n## From earlier retros\n\n")
-		for _, c := range s.Carry {
-			mark := " "
-			if c.Done {
-				mark = "x"
-			}
-			meta := "from " + c.FromStr
-			if c.Owner != "" {
-				meta = c.Owner + ", " + meta
-			}
-			b.WriteString("- [" + mark + "] " + oneLine(c.Body) + " (" + meta + ")\n")
-		}
+		b.WriteString("- " + oneLine(c.Body) + " (" + c.Author + ")" + reactionSuffix(c) + "\n")
 	}
 
 	for i, h := range s.Cols {
@@ -79,11 +85,11 @@ func Markdown(s *State, date string) string {
 		b.WriteString("_No actions._\n")
 	}
 	for _, c := range byCol["a"] {
-		owner := ""
+		owner := "owner: nobody yet"
 		if c.Owner != "" {
-			owner = " (" + c.Owner + ")"
+			owner = "owner: " + c.Owner
 		}
-		b.WriteString("- [ ] " + oneLine(c.Body) + owner + reactionSuffix(c) + "\n")
+		b.WriteString("- [ ] " + oneLine(c.Body) + " (" + owner + ")" + reactionSuffix(c) + "\n")
 	}
 	return b.String()
 }
@@ -92,13 +98,13 @@ func reactionSuffix(c Card) string {
 	var parts []string
 	for _, e := range Emojis {
 		if n := len(c.R[e]); n > 0 {
-			parts = append(parts, e+strconv.Itoa(n))
+			parts = append(parts, e+" "+strconv.Itoa(n))
 		}
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return "  " + strings.Join(parts, " ")
+	return " " + strings.Join(parts, ", ")
 }
 
 func oneLine(s string) string {

@@ -49,5 +49,3 @@ func ClientIP(r *http.Request, proxies []netip.Prefix) string {
 	}
 	return peer.String()
 }
-
-func (a *Auth) ClientIP(r *http.Request) string { return ClientIP(r, a.cfg.TrustedProxies) }

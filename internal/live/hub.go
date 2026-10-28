@@ -14,6 +14,13 @@ const (
 	pingInterval = 20 * time.Second
 )
 
+type Peer struct {
+	ID      int64
+	Name    string
+	Host    bool
+	Waiting bool
+}
+
 type Hub struct {
 	mu     sync.Mutex
 	rooms  map[string]map[*subscriber]struct{}
@@ -22,9 +29,10 @@ type Hub struct {
 }
 
 type subscriber struct {
-	name   string
+	Peer
 	ch     chan []byte
 	kicked chan struct{}
+	final  []byte
 	gone   bool
 }
 
@@ -34,19 +42,39 @@ func NewHub() *Hub {
 
 func (h *Hub) Close() { h.once.Do(func() { close(h.closed) }) }
 
-func (h *Hub) Send(room string, v any) {
+func encode(v any) []byte {
 	b, err := json.Marshal(v)
 	if err != nil {
+		return nil
+	}
+	return b
+}
+
+func (h *Hub) Send(room string, v any) {
+	h.sendWhere(room, v, func(s *subscriber) bool { return !s.Waiting })
+}
+
+func (h *Hub) SendHosts(room string, v any) {
+	h.sendWhere(room, v, func(s *subscriber) bool { return s.Host && !s.Waiting })
+}
+
+func (h *Hub) SendPeer(room string, id int64, v any) {
+	h.sendWhere(room, v, func(s *subscriber) bool { return s.ID == id })
+}
+
+func (h *Hub) sendWhere(room string, v any, match func(*subscriber) bool) {
+	b := encode(v)
+	if b == nil {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.sendLocked(room, b)
+	h.sendLocked(room, b, match)
 }
 
-func (h *Hub) sendLocked(room string, b []byte) {
+func (h *Hub) sendLocked(room string, b []byte, match func(*subscriber) bool) {
 	for s := range h.rooms[room] {
-		if s.gone {
+		if s.gone || !match(s) {
 			continue
 		}
 		select {
@@ -58,19 +86,56 @@ func (h *Hub) sendLocked(room string, b []byte) {
 	}
 }
 
+func (h *Hub) Kick(room string, id int64, last any) {
+	h.endWhere(room, last, func(s *subscriber) bool { return s.ID == id })
+}
+
+func (h *Hub) CloseRoom(room string, last any) {
+	h.endWhere(room, last, func(*subscriber) bool { return true })
+}
+
+func (h *Hub) endWhere(room string, last any, match func(*subscriber) bool) {
+	b := encode(last)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for s := range h.rooms[room] {
+		if s.gone || !match(s) {
+			continue
+		}
+		s.gone = true
+		s.final = b
+		close(s.kicked)
+	}
+}
+
 func (h *Hub) Here(room string) []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.hereLocked(room)
 }
 
+func (h *Hub) HostHere(room string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.hostHereLocked(room)
+}
+
+func (h *Hub) hostHereLocked(room string) bool {
+	for s := range h.rooms[room] {
+		if s.Host && !s.Waiting && !s.gone {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *Hub) hereLocked(room string) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	for s := range h.rooms[room] {
-		if !seen[s.name] {
-			seen[s.name] = true
-			out = append(out, s.name)
+		if !s.Waiting && !s.gone && !seen[s.Name] {
+			seen[s.Name] = true
+			out = append(out, s.Name)
 		}
 	}
 	sort.Strings(out)
@@ -78,11 +143,13 @@ func (h *Hub) hereLocked(room string) []string {
 }
 
 func (h *Hub) presenceLocked(room string) {
-	b, _ := json.Marshal(map[string]any{"t": "here", "names": h.hereLocked(room)})
-	h.sendLocked(room, b)
+	here := encode(map[string]any{"t": "here", "names": h.hereLocked(room)})
+	h.sendLocked(room, here, func(s *subscriber) bool { return !s.Waiting })
+	host := encode(map[string]any{"t": "host", "online": h.hostHereLocked(room)})
+	h.sendLocked(room, host, func(s *subscriber) bool { return s.Waiting })
 }
 
-func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, room, name string) {
+func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, room string, p Peer) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming is not supported by this connection.", http.StatusInternalServerError)
@@ -93,7 +160,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, room, name string) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	s := &subscriber{name: name, ch: make(chan []byte, bufferSize), kicked: make(chan struct{})}
+	s := &subscriber{Peer: p, ch: make(chan []byte, bufferSize), kicked: make(chan struct{})}
 	h.mu.Lock()
 	if h.rooms[room] == nil {
 		h.rooms[room] = map[*subscriber]struct{}{}
@@ -132,6 +199,12 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, room, name string) {
 		case <-h.closed:
 			return
 		case <-s.kicked:
+			h.mu.Lock()
+			final := s.final
+			h.mu.Unlock()
+			if final != nil {
+				write("data: %s\n\n", final)
+			}
 			return
 		case b := <-s.ch:
 			if !write("data: %s\n\n", b) {

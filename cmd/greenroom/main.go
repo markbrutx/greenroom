@@ -24,7 +24,7 @@ import (
 
 var version = "dev"
 
-const usage = `Greenroom: small self-hosted tools for teams.
+const usage = `Greenroom: self-hosted retro rooms. Create a room, share the link, export for your agent.
 
 Usage:
   greenroom [serve]        start the server
@@ -164,12 +164,12 @@ func serve() error {
 	}
 	defer db.Close()
 
-	a, err := auth.New(ctx, cfg, db, log)
+	a, err := auth.New(ctx, db)
 	if err != nil {
 		return err
 	}
 	hub := live.NewHub()
-	app, err := web.New(cfg, db, hub, a, log)
+	app, err := web.New(cfg, db, hub, log)
 	if err != nil {
 		return err
 	}
@@ -177,9 +177,11 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	if err := app.Register(retro.New(pool)); err != nil {
+	rooms, err := retro.New(app, a, pool, retro.DefaultLimits())
+	if err != nil {
 		return err
 	}
+	go rooms.Janitor(ctx)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -203,8 +205,8 @@ func serve() error {
 			errc <- srv.Serve(ln)
 		}
 	}()
-	log.Info("greenroom started", "version", fullVersion(), "addr", ln.Addr().String(), "db", string(db.Dialect),
-		"tls", cfg.TLSCert != "")
+	log.Info("greenroom started", "version", fullVersion(), "addr", ln.Addr().String(),
+		"tls", cfg.TLSCert != "", "room_ttl", cfg.RoomTTL.String())
 
 	select {
 	case err := <-errc:

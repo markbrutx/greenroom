@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
-	"fmt"
 	"html/template"
 	"io/fs"
 	"log/slog"
@@ -16,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/markbrutx/greenroom/internal/auth"
 	"github.com/markbrutx/greenroom/internal/config"
 	"github.com/markbrutx/greenroom/internal/live"
 	"github.com/markbrutx/greenroom/internal/store"
@@ -28,42 +26,21 @@ var templateFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
-type Tool interface {
-	Info() ToolInfo
-	Mount(app *App) error
-}
-
-type ToolInfo struct {
-	Slug string
-	Name string
-}
-
-type Crumb struct {
-	Label string
-	Href  string
-}
-
 type View struct {
-	Title  string
-	Crumbs []Crumb
-	Tools  []ToolInfo
-	User   string
-	Brand  Brand
-	Data   any
+	Title string
+	Brand Brand
+	Data  any
 }
 
 type App struct {
-	Cfg  *config.Config
-	DB   *store.DB
-	Hub  *live.Hub
-	Auth *auth.Auth
-	Log  *slog.Logger
+	Cfg *config.Config
+	DB  *store.DB
+	Hub *live.Hub
+	Log *slog.Logger
 
-	mux    *http.ServeMux
-	base   *template.Template
-	loginT *template.Template
-	brand  Brand
-	tools  []ToolInfo
+	mux   *http.ServeMux
+	base  *template.Template
+	brand Brand
 
 	assetsMu sync.RWMutex
 	assets   map[string]asset
@@ -75,8 +52,8 @@ type asset struct {
 	ctype   string
 }
 
-func New(cfg *config.Config, db *store.DB, hub *live.Hub, a *auth.Auth, log *slog.Logger) (*App, error) {
-	app := &App{Cfg: cfg, DB: db, Hub: hub, Auth: a, Log: log, mux: http.NewServeMux(), assets: map[string]asset{}}
+func New(cfg *config.Config, db *store.DB, hub *live.Hub, log *slog.Logger) (*App, error) {
+	app := &App{Cfg: cfg, DB: db, Hub: hub, Log: log, mux: http.NewServeMux(), assets: map[string]asset{}}
 	brand, err := loadBrand(cfg)
 	if err != nil {
 		return nil, err
@@ -96,34 +73,15 @@ func New(cfg *config.Config, db *store.DB, hub *live.Hub, a *auth.Auth, log *slo
 	if err != nil {
 		return nil, err
 	}
-	if err := app.parsePages(); err != nil {
-		return nil, err
-	}
 	app.routes()
 	return app, nil
 }
 
 func (app *App) Brand() Brand { return app.brand }
 
-func (app *App) Register(t Tool) error {
-	info := t.Info()
-	if info.Slug == "" || strings.ContainsAny(info.Slug, "/ ") {
-		return fmt.Errorf("tool slug %q is invalid", info.Slug)
-	}
-	if err := t.Mount(app); err != nil {
-		return fmt.Errorf("mount %s: %w", info.Slug, err)
-	}
-	app.tools = append(app.tools, info)
-	return nil
-}
+func (app *App) Handle(pattern string, h http.Handler) { app.mux.Handle(pattern, h) }
 
-func (app *App) Page(pattern string, h http.HandlerFunc) {
-	app.mux.Handle(pattern, app.Auth.Page(h))
-}
-
-func (app *App) API(pattern string, h http.HandlerFunc) {
-	app.mux.Handle(pattern, app.Auth.API(h))
-}
+func (app *App) HandleFunc(pattern string, h http.HandlerFunc) { app.mux.HandleFunc(pattern, h) }
 
 func (app *App) Templates(fsys fs.FS, file string) (*template.Template, error) {
 	t, err := app.base.Clone()
@@ -138,11 +96,7 @@ func (app *App) Render(w http.ResponseWriter, r *http.Request, t *template.Templ
 }
 
 func (app *App) RenderStatus(w http.ResponseWriter, r *http.Request, t *template.Template, v View, status int) {
-	v.User = auth.User(r.Context())
 	v.Brand = app.brand
-	if len(app.tools) > 1 {
-		v.Tools = app.tools
-	}
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, "layout", v); err != nil {
 		app.Log.Error("render", "err", err, "path", r.URL.Path)

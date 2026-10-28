@@ -1,0 +1,9 @@
+{{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}">{{end}}
+{{define "bodyclass"}}page-start{{end}}
+{{define "main"}}
+<section class="lobby">
+<h1>{{.Data.Heading}}</h1>
+<p class="sub">{{.Data.Message}}</p>
+<p class="back"><a class="btn" href="/">Start page</a></p>
+</section>
+{{end}}
