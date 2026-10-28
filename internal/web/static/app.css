@@ -88,7 +88,8 @@ body {
 }
 
 h1, h2, h3, p { margin: 0; }
-h1, h2, h3 { font-weight: var(--w-2); letter-spacing: -.02em; line-height: 1.15; }
+h1, h2, h3 { font-weight: var(--w-2); letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; }
+p { text-wrap: pretty; }
 
 a { color: inherit; text-underline-offset: 3px; }
 
