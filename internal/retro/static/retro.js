@@ -303,7 +303,8 @@
     const ph = picker.offsetHeight;
     const left = Math.min(Math.max(8, r.right - pw), window.innerWidth - pw - 8);
     let top = r.top - ph - 8;
-    if (top < 64) top = r.bottom + 8;
+    const bar = document.querySelector('.topbar');
+    if (top < (bar ? bar.offsetHeight : 64) + 8) top = r.bottom + 8;
     picker.style.left = left + 'px';
     picker.style.top = top + 'px';
   }
