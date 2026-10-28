@@ -15,9 +15,6 @@ Parameters:
     Default: t4g.micro
   ImageId:
     Type: AWS::EC2::Image::Id
-  PasswordParameter:
-    Type: String
-    Default: /greenroom/password
 
 Resources:
   SecurityGroup:
@@ -42,14 +39,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-      Policies:
-        - PolicyName: read-password
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: ssm:GetParameter
-                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${PasswordParameter}
 
   Profile:
     Type: AWS::IAM::InstanceProfile
@@ -93,10 +82,7 @@ Resources:
               chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
               mkdir -p /opt/greenroom
               cd /opt/greenroom
-              PASSWORD=$(aws ssm get-parameter --region ${AWS::Region} --name ${PasswordParameter} --with-decryption --query Parameter.Value --output text)
-              umask 077
-              printf 'GREENROOM_PASSWORD=%s\nTAG=%s\n' "$PASSWORD" "${ImageTag}" > .env
-              umask 022
+              printf 'TAG=%s\n' "${ImageTag}" > .env
               cat > Caddyfile <<'EOF'
               ${Domain} {
                 encode zstd gzip
@@ -117,7 +103,6 @@ Resources:
                   security_opt: [no-new-privileges:true]
                   cap_drop: [ALL]
                   environment:
-                    GREENROOM_PASSWORD: ${!GREENROOM_PASSWORD}
                     GREENROOM_TRUSTED_PROXIES: 172.16.0.0/12
                   volumes:
                     - data:/data
