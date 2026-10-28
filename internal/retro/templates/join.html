@@ -1,28 +1,27 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}">{{if eq .Data.State "waiting"}}<script src="{{asset "retro/lobby.js"}}" defer></script>{{end}}{{end}}
 {{define "bodyclass"}}page-start{{end}}
 {{define "main"}}
-<section class="start lobby" id="lobby" data-code="{{.Data.Code}}">
-<p class="eyebrow">Retro<b>{{.Data.Code}}</b></p>
+<section class="lobby" id="lobby" data-code="{{.Data.Code}}">
+<p class="eyebrow">Retro <span class="code">{{.Data.Code}}</span></p>
 {{if eq .Data.State "waiting"}}
-<div class="ring" aria-hidden="true"><svg viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-arc" cx="60" cy="60" r="54" pathLength="100"/></svg><span class="ring-time" id="ring-time">0:00</span><span class="ring-label">Waiting</span></div>
-<h1>Asking to join</h1>
-<p class="lede">You are in as soon as {{with .Data.Host}}{{.}}{{else}}the host{{end}} lets you in.</p>
-<p class="note" id="host-note" {{if .Data.HostOnline}}hidden{{end}}>Waiting for the host. They are not in the room right now.</p>
-<p class="foot">Joining as {{.Data.Name}}</p>
+<div class="pulse" aria-hidden="true"></div>
+<h1>Asking to join…</h1>
+<p class="sub">You will be in as soon as {{with .Data.Host}}{{.}}{{else}}the host{{end}} lets you in.</p>
+<p class="note" id="host-note" {{if .Data.HostOnline}}hidden{{end}}>Waiting for the host. They are not in the room right now, so this may take a while.</p>
+<p class="sub small">Joining as <b>{{.Data.Name}}</b></p>
 <noscript><p class="note">Reload this page to check whether you are in.</p></noscript>
 {{else}}
 {{if eq .Data.State "denied"}}<h1>You were not let in</h1>
-<p class="lede">{{with .Data.Host}}{{.}}{{else}}The host{{end}} declined your request to join.</p>
+<p class="sub">{{with .Data.Host}}{{.}}{{else}}The host{{end}} declined your request to join.</p>
 {{else if eq .Data.State "removed"}}<h1>You were removed</h1>
-<p class="lede">The host removed you from this room.</p>
+<p class="sub">The host removed you from this room.</p>
 {{else}}<h1>{{with .Data.Host}}Join {{.}}’s retro{{else}}Join the retro{{end}}</h1>
-<p class="lede">{{if .Data.Here}}{{.Data.Here}} {{if eq .Data.Here 1}}person is{{else}}people are{{end}} in the room now.{{else}}No one is in the room right now.{{end}}</p>
+<p class="sub">{{if .Data.Here}}{{.Data.Here}} {{if eq .Data.Here 1}}person is{{else}}people are{{end}} in the room now.{{else}}No one is in the room right now.{{end}}</p>
 {{end}}
-<form class="sheet start-form" method="post" action="/{{.Data.Code}}/join">
-<label class="label" for="name">Your name</label>
-<input class="input" id="name" name="name" autocomplete="name" autocapitalize="words" maxlength="40" value="{{.Data.Name}}" required autofocus>
+<form class="lobby-form" method="post" action="/{{.Data.Code}}/join">
+<label class="field"><span>Your name</span><input class="input" name="name" autocomplete="name" autocapitalize="words" maxlength="40" value="{{.Data.Name}}" required autofocus></label>
 {{$ask := or (not .Data.Open) (ne .Data.State "join")}}
-<button class="btn btn-primary btn-wide" type="submit">{{if eq .Data.State "join"}}{{if $ask}}Ask to join{{else}}Join{{end}}{{else}}Ask to join again{{end}}</button>
+<button class="btn btn-primary btn-block" type="submit">{{if eq .Data.State "join"}}{{if $ask}}Ask to join{{else}}Join{{end}}{{else}}Ask to join again{{end}}</button>
 {{if and $ask (eq .Data.State "join")}}<p class="hint">The host lets people into this room.</p>{{end}}
 {{with .Data.Err}}<p class="form-error" role="alert">{{.}}</p>{{end}}
 </form>

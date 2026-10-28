@@ -1,37 +1,34 @@
 {{define "head"}}<link rel="stylesheet" href="{{asset "retro/retro.css"}}"><script src="{{asset "retro/retro.js"}}" defer></script>{{end}}
-{{define "bodyclass"}}page-room{{end}}
-{{define "crumbs"}}<button class="code" type="button" data-panel title="Room settings and link">{{.Data.Code}}</button>
-<div class="here" id="here" aria-label="Here now"></div>{{end}}
-{{define "bar"}}<button class="btn btn-line" type="button" id="share" data-panel>Share<span class="badge" id="badge" hidden></span></button>
-<button class="btn btn-primary" type="button" id="copy-agent" title="Copy the retro as Markdown for an AI agent"><span>Copy<span class="long"> for agent</span></span></button>{{end}}
+{{define "crumbs"}}<button class="code-chip" type="button" data-panel title="Room settings and link">{{.Data.Code}}</button>{{end}}
+{{define "bar"}}<div class="here" id="here" aria-label="Here now"></div>
+<button class="btn btn-sm" type="button" id="share" data-panel aria-label="Share and room settings">{{icon "share"}}<span class="lbl">Share</span><span class="badge" id="badge" hidden></span></button>
+<button class="btn btn-sm" type="button" id="copy-agent" title="Copy the retro as Markdown for an AI agent" aria-label="Copy for agent">{{icon "sparkle"}}<span class="lbl">Copy for agent</span></button>
+<a class="icon-btn" id="download" href="/{{.Data.Code}}/export.md?download=1" download title="Download .md" aria-label="Download .md">{{icon "download"}}</a>
+<span class="me" id="me">{{.Data.Me}}</span>{{end}}
 {{define "main"}}
 <script type="application/json" id="retro-state">{{.Data}}</script>
-<section class="block">
-<div class="block-head"><h2>Warm-up</h2><button class="link" type="button" id="warmup-dice" title="Another question">New question</button></div>
-<textarea class="question" id="warmup" rows="1" maxlength="300" aria-label="Warm-up question"></textarea>
+<h2 class="block-head">Warm-up</h2>
+<div class="warmup"><textarea id="warmup" rows="1" maxlength="300" aria-label="Warm-up question"></textarea><button class="icon-btn" type="button" id="warmup-dice" title="Another question" aria-label="Another question">{{icon "dice"}}</button></div>
 <div class="col col-w" id="col-w"><div class="cards"></div><button class="add" type="button" data-add="w">+ Answer</button></div>
-</section>
-<section class="block">
-<div class="block-head"><h2>Board</h2><button class="link" type="button" id="cols-dice" title="Another column set, while the columns are empty">Other columns</button></div>
+<h2 class="block-head">Board <button class="icon-btn" type="button" id="cols-dice" title="Another column set, while the columns are empty" aria-label="Another column set">{{icon "dice"}}</button></h2>
 <div class="board" id="board">
 <div class="col col-a" id="col-a"><h3 class="col-title">Actions</h3><div class="cards"></div><button class="add" type="button" data-add="a">+ Action</button></div>
 </div>
-</section>
 <div class="picker" id="picker" role="menu" aria-label="Add a reaction" hidden></div>
 <div class="knocks" id="knocks" role="region" aria-label="People asking to join" aria-live="polite" hidden></div>
-<dialog class="panel sheet" id="panel" aria-labelledby="panel-title">
-<div class="panel-head"><h2 id="panel-title">Room {{.Data.Code}}</h2><button class="close" type="button" id="panel-close" aria-label="Close">×</button></div>
+<dialog class="panel" id="panel" aria-labelledby="panel-title">
+<div class="panel-head"><h2 id="panel-title">Room <span class="code">{{.Data.Code}}</span></h2><button class="icon-btn" type="button" id="panel-close" aria-label="Close">{{icon "close"}}</button></div>
 <p class="welcome" id="welcome" hidden>Your room is ready. Share the link to invite people.</p>
 <section class="psec">
 <h3>Invite</h3>
-<div class="linkrow"><input class="input" id="room-link" readonly aria-label="Room link"><button class="btn btn-primary" type="button" id="copy-link">Copy link</button></div>
+<div class="linkrow"><input class="input" id="room-link" readonly aria-label="Room link"><button class="btn btn-primary" type="button" id="copy-link">{{icon "copy"}}Copy link</button></div>
 <p class="hint" id="access-hint"></p>
 </section>
 <section class="psec host-only" hidden>
 <h3>Access</h3>
-<div class="switch" role="radiogroup" aria-label="Who can come in">
-<label><input type="radio" name="access" value="closed"><span>Ask to join</span></label>
-<label><input type="radio" name="access" value="open"><span>Open</span></label>
+<div class="seg" role="radiogroup" aria-label="Who can come in">
+<label><input type="radio" name="access" value="closed"><span>{{icon "lock"}}Ask to join</span></label>
+<label><input type="radio" name="access" value="open"><span>{{icon "globe"}}Open</span></label>
 </div>
 </section>
 <section class="psec host-only" id="waiting-sec" hidden>
@@ -44,21 +41,21 @@
 </section>
 <section class="psec">
 <h3>Export</h3>
-<div class="row"><button class="btn btn-line" type="button" id="copy-agent-2">Copy for agent</button><a class="btn btn-line" id="download" href="/{{.Data.Code}}/export.md?download=1" download>Download .md</a></div>
+<div class="row"><button class="btn" type="button" id="copy-agent-2">{{icon "sparkle"}}Copy for agent</button><a class="btn" href="/{{.Data.Code}}/export.md?download=1" download>{{icon "download"}}Download .md</a></div>
 <p class="hint">Markdown with the warm-up, columns, actions and owners, ready to paste into a prompt.</p>
 </section>
 <section class="psec host-only" hidden>
 <h3>Host link</h3>
-<p class="hint">Opens this room as host on another device. Keep it to yourself.</p>
-<div class="linkrow"><input class="input" id="host-link" readonly aria-label="Host link"><button class="btn btn-line" type="button" id="copy-host">Copy</button></div>
+<p class="hint">Opens this room as host on another device. Anyone with it can manage the room, so keep it to yourself.</p>
+<div class="linkrow"><input class="input" id="host-link" readonly aria-label="Host link"><button class="btn" type="button" id="copy-host">{{icon "key"}}Copy</button></div>
 </section>
-<section class="psec host-only" hidden>
+<section class="psec host-only danger" hidden>
 <h3>Delete room</h3>
-<p class="hint">Removes the board for everyone, right away. Rooms are also deleted after {{.Data.TTL}} without activity.</p>
-<div class="row" id="delete-row"><button class="btn btn-line" type="button" id="delete">Delete room</button></div>
-<div class="row" id="delete-confirm" hidden><span class="confirm">Delete for everyone?</span><button class="btn btn-quiet" type="button" id="delete-cancel">Cancel</button><button class="btn btn-danger" type="button" id="delete-yes">Delete</button></div>
+<p class="hint">Deletes the board, cards and actions for everyone, right away. Rooms are also deleted on their own after {{.Data.TTL}} without activity.</p>
+<div class="row" id="delete-row"><button class="btn btn-danger" type="button" id="delete">{{icon "trash"}}Delete room</button></div>
+<div class="row confirm" id="delete-confirm" hidden><span>Delete for everyone?</span><button class="btn" type="button" id="delete-cancel">Cancel</button><button class="btn btn-danger" type="button" id="delete-yes">Delete</button></div>
 </section>
-<p class="hint guest-only psec">This room is deleted after {{.Data.TTL}} without activity.</p>
+<p class="hint guest-only">This room is deleted after {{.Data.TTL}} without activity.</p>
 </dialog>
 <template id="tpl-col"><div class="col"><input class="col-title" maxlength="80" aria-label="Column title" autocomplete="off"><div class="cards"></div><button class="add" type="button">+ Card</button></div></template>
 <template id="tpl-card"><article class="rcard"><textarea rows="1" maxlength="2000" aria-label="Card text"></textarea><div class="reacts" hidden></div><div class="rcard-foot"><span class="who"></span><span class="lockmsg"></span><span class="spacer"></span><button type="button" class="react-add" aria-label="Add a reaction" title="Add a reaction">{{icon "smile"}}</button><select class="owner" aria-label="Who does it" hidden></select><button type="button" class="del" aria-label="Delete card" title="Delete card">×</button></div></article></template>

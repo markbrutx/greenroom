@@ -474,9 +474,6 @@
       board.insertBefore(d, actions);
     });
     cols = next.slice();
-    const main = document.getElementById('main');
-    main.style.setProperty('--cols', String(next.length + 1));
-    main.toggleAttribute('data-many', next.length + 1 > 5);
     for (const el of cards.values()) {
       if (isBoardCol(el._c.col)) {
         const box = boxFor(el._c.col);
@@ -506,12 +503,7 @@
     here = names.slice();
     $('#here').replaceChildren(...names.map((n) => {
       const s = document.createElement('span');
-      s.className = 'p';
-      s.title = n;
-      const full = document.createElement('span');
-      full.className = 'n';
-      full.textContent = n;
-      s.append(full);
+      s.textContent = n;
       return s;
     }));
     renderPeople();
@@ -697,14 +689,14 @@
       }
       if (m.id === S.meId) {
         const tag = document.createElement('span');
-        tag.className = 'tag';
+        tag.className = 'tag soft';
         tag.textContent = 'You';
         li.append(tag);
       }
       if (S.host && !m.host) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'link';
+        b.className = 'btn btn-sm btn-quiet';
         b.textContent = 'Remove';
         b.setAttribute('aria-label', 'Remove ' + m.name);
         b.addEventListener('click', () => {
@@ -759,12 +751,12 @@
       text.append(b, ' wants to join');
       const deny = document.createElement('button');
       deny.type = 'button';
-      deny.className = 'btn btn-quiet';
+      deny.className = 'btn btn-sm';
       deny.textContent = 'Deny';
       deny.setAttribute('aria-label', 'Deny ' + p.name);
       const admit = document.createElement('button');
       admit.type = 'button';
-      admit.className = 'btn btn-primary';
+      admit.className = 'btn btn-sm btn-primary';
       admit.textContent = 'Admit';
       admit.setAttribute('aria-label', 'Admit ' + p.name);
       const act = (op) => {
@@ -785,18 +777,13 @@
       label.textContent = pendingList.length + ' people are waiting';
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'btn btn-primary';
+      b.className = 'btn btn-sm btn-primary';
       b.textContent = 'Admit all';
       b.addEventListener('click', () => {
         b.disabled = true;
         hostApi({ op: 'admitall' }).catch(() => { b.disabled = false; });
       });
-      const review = document.createElement('button');
-      review.type = 'button';
-      review.className = 'btn btn-quiet knock-review';
-      review.textContent = 'Review';
-      review.addEventListener('click', openPanel);
-      all.append(label, review, b);
+      all.append(label, b);
       items.push(all);
     }
     return items;

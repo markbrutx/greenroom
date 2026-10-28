@@ -233,7 +233,7 @@ func TestCreateRoom(t *testing.T) {
 	s := start(t, nil, nil)
 	c := s.client()
 	status, body := s.get(c, "/")
-	if status != http.StatusOK || !strings.Contains(body, "Create room") || !strings.Contains(body, "or join with a code") {
+	if status != http.StatusOK || !strings.Contains(body, "New retro") || !strings.Contains(body, "Enter a code or link") {
 		t.Fatalf("home: %d", status)
 	}
 	if resp := s.post(c, "/new", "name=++&access=open", nil); resp.StatusCode != http.StatusBadRequest {
