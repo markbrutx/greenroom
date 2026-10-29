@@ -5,14 +5,18 @@
 <button class="btn btn-sm btn-quiet" type="button" id="copy-agent" title="Copy the retro as Markdown, ready to paste into an AI agent">Copy .md</button>{{end}}
 {{define "main"}}
 <script type="application/json" id="retro-state">{{.Data}}</script>
-<h2 class="block-head">Warm-up</h2>
+<h2 class="block-head"><button class="fold" type="button" data-fold="w" aria-expanded="true" aria-controls="fold-w">Warm-up{{icon "chevron"}}</button><span class="fold-sum" id="sum-w"></span></h2>
+<div class="fold-body" id="fold-w">
 <div class="warmup"><textarea id="warmup" rows="1" maxlength="300" aria-label="Warm-up question"></textarea><button class="icon-btn" type="button" id="warmup-dice" title="Another question" aria-label="Another question">{{icon "dice"}}</button></div>
 <div class="col col-w" id="col-w"><div class="cards"></div><button class="add" type="button" data-add="w">+ Answer</button></div>
-<h2 class="block-head">Happiness</h2>
+</div>
+<h2 class="block-head"><button class="fold" type="button" data-fold="mood" aria-expanded="true" aria-controls="fold-mood">Happiness{{icon "chevron"}}</button><span class="fold-sum" id="sum-mood"></span></h2>
+<div class="fold-body" id="fold-mood">
 <div class="mood" id="mood">
 <div class="faces" role="radiogroup" aria-label="{{.Data.MoodQ}}">{{range .Data.Faces}}<button class="face" type="button" role="radio" aria-checked="false" data-score="{{.Score}}" data-tip="{{.Label}}" aria-label="{{.Score}} of 5, {{.Label}}"><span class="face-fill"></span><span class="face-emoji" aria-hidden="true">{{.Emoji}}</span><span class="face-n"></span></button>{{end}}</div>
 <div class="mood-text"><p class="mood-q">{{.Data.MoodQ}}</p><p class="mood-status" id="mood-status" aria-live="polite"></p></div>
 <div class="mood-side"><p class="mood-avg" id="mood-avg" hidden><b id="mood-score"></b><span>/ 5</span></p><button class="btn btn-sm" type="button" id="mood-show" hidden>Show results</button><button class="btn btn-sm btn-quiet" type="button" id="mood-reset" hidden>Vote again</button></div>
+</div>
 </div>
 <h2 class="block-head">Board <button class="icon-btn" type="button" id="cols-dice" title="Another column set, while the columns are empty" aria-label="Another column set">{{icon "dice"}}</button></h2>
 <div class="board" id="board">

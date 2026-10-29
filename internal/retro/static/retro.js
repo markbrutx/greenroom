@@ -23,7 +23,32 @@
   }
   function forget() {
     try { localStorage.setItem(ROOMS, JSON.stringify(savedRooms().filter((r) => r.code !== code))); } catch (e) {}
+    saveFolds([]);
   }
+
+  const FOLDS = 'moored:folds';
+  function allFolds() {
+    try { return JSON.parse(localStorage.getItem(FOLDS) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function saveFolds(list) {
+    try {
+      const keep = new Set(savedRooms().map((r) => r.code));
+      const all = allFolds();
+      Object.keys(all).forEach((k) => { if (!keep.has(k)) delete all[k]; });
+      if (list.length) all[code] = list;
+      else delete all[code];
+      localStorage.setItem(FOLDS, JSON.stringify(all));
+    } catch (e) {}
+  }
+  const folded = new Set(Array.isArray(allFolds()[code]) ? allFolds()[code] : []);
+  function setFold(name, shut) {
+    const btn = document.querySelector('[data-fold="' + name + '"]');
+    const body = document.getElementById('fold-' + name);
+    if (!btn || !body) return;
+    btn.setAttribute('aria-expanded', shut ? 'false' : 'true');
+    body.hidden = shut;
+  }
+  folded.forEach((n) => setFold(n, true));
   remember();
   const tplCard = $('#tpl-card').content.firstElementChild;
   const tplCol = $('#tpl-col').content.firstElementChild;
@@ -563,7 +588,25 @@
     }
   }
 
+  function foldSums() {
+    let answers = 0;
+    for (const el of cards.values()) if (el._c.col === 'w' && el._c.body.trim()) answers += 1;
+    const w = $('#sum-w');
+    if (w) w.textContent = (S.warmup || '') + (answers ? ' \u00b7 ' + plural(answers, 'answer') : '');
+    const m = $('#sum-mood');
+    if (!m) return;
+    const face = mood.mine ? S.faces[mood.mine - 1].emoji + ' ' : '';
+    if (mood.shown) {
+      m.textContent = $('#mood-score').textContent + ' / 5 \u00b7 ' + plural(mood.votes, 'vote');
+    } else if (mood.votes) {
+      m.textContent = face + mood.votes + ' of ' + Math.max(mood.votes, here.length) + ' voted';
+    } else {
+      m.textContent = 'No votes yet';
+    }
+  }
+
   function diceState() {
+    foldSums();
     let n = 0;
     for (const el of cards.values()) if (isBoardCol(el._c.col)) n += 1;
     board.querySelectorAll('.board-col .cards').forEach((box) => { n += [...box.children].filter((el) => !el._c.id).length; });
@@ -578,6 +621,7 @@
     }
     S.warmup = m.warmup;
     buildCols(m.cols);
+    foldSums();
   }
 
   function renderHere(names) {
@@ -627,6 +671,7 @@
     $('#mood-show').hidden = !(S.host && !m.shown && m.votes > 0);
     $('#mood-reset').hidden = !(S.host && m.shown);
     if (!m.shown) resetAsk(false);
+    foldSums();
   }
 
   function setMood(next) {
@@ -716,6 +761,24 @@
 
   window.addEventListener('resize', () => { placePicker(); placeTip(); });
   window.addEventListener('scroll', () => { placePicker(); placeTip(); }, { passive: true });
+
+  document.querySelectorAll('[data-fold]').forEach((btn) => btn.addEventListener('click', () => {
+    const name = btn.dataset.fold;
+    const body = document.getElementById('fold-' + name);
+    const shut = btn.getAttribute('aria-expanded') === 'true';
+    if (shut) {
+      if (openEl && body.contains(openEl)) leave(openEl);
+      if (picker._el && body.contains(picker._el)) closePicker(false);
+      if (tipFor && body.contains(tipFor)) hideTip();
+      if (body.contains(document.activeElement)) document.activeElement.blur();
+      folded.add(name);
+    } else {
+      folded.delete(name);
+    }
+    setFold(name, shut);
+    foldSums();
+    saveFolds([...folded]);
+  }));
 
   faces.forEach((b) => b.addEventListener('click', () => vote(Number(b.dataset.score))));
   $('#mood-show').addEventListener('click', () => {

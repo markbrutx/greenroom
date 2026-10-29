@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Warm-up and Happiness fold away with a click on their heading; a folded
+  block keeps a one-line summary. The choice is remembered per room in the
+  browser.
+
 ## 0.5.0
 
 - Happiness check: everyone picks one of five faces, anonymously. Results
