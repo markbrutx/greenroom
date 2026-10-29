@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var KEY = 'greenroom:theme';
+  var KEY = 'moored:theme';
   var root = document.documentElement;
   var media = window.matchMedia('(prefers-color-scheme: dark)');
   function stored() {
@@ -10,6 +10,14 @@
     root.dataset.theme = t;
     root.style.colorScheme = t;
   }
+  try {
+    ['theme', 'rooms'].forEach(function (k) {
+      var old = localStorage.getItem('greenroom:' + k);
+      if (old === null) return;
+      if (localStorage.getItem('moored:' + k) === null) localStorage.setItem('moored:' + k, old);
+      localStorage.removeItem('greenroom:' + k);
+    });
+  } catch (e) {}
   var saved = stored();
   apply(saved === 'light' || saved === 'dark' ? saved : (media.matches ? 'dark' : 'light'));
   media.addEventListener('change', function (e) {

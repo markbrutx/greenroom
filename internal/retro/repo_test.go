@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/markbrutx/greenroom/internal/storetest"
+	"github.com/markbrutx/moored/internal/storetest"
 )
 
 func newRepo(t *testing.T) *Repo {

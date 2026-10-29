@@ -27,7 +27,7 @@ func LoadPool(override string) (*Pool, error) {
 	if override != "" {
 		b, err := os.ReadFile(override)
 		if err != nil {
-			return nil, fmt.Errorf("GREENROOM_TEMPLATES: %w", err)
+			return nil, fmt.Errorf("MOORED_TEMPLATES: %w", err)
 		}
 		raw, source = b, override
 	}

@@ -1,6 +1,6 @@
 services:
-  greenroom:
-    image: ghcr.io/markbrutx/greenroom:latest
+  moored:
+    image: ghcr.io/markbrutx/moored:latest
     build:
       context: ..
       dockerfile: Dockerfile
@@ -13,12 +13,12 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      GREENROOM_TRUSTED_PROXIES: ${GREENROOM_TRUSTED_PROXIES:-172.16.0.0/12}
-      GREENROOM_NAME: ${GREENROOM_NAME:-Greenroom}
-      GREENROOM_TZ: ${GREENROOM_TZ:-UTC}
-      GREENROOM_ROOM_TTL: ${GREENROOM_ROOM_TTL:-168h}
+      MOORED_TRUSTED_PROXIES: ${MOORED_TRUSTED_PROXIES:-172.16.0.0/12}
+      MOORED_NAME: ${MOORED_NAME:-moored.dev}
+      MOORED_TZ: ${MOORED_TZ:-UTC}
+      MOORED_ROOM_TTL: ${MOORED_ROOM_TTL:-168h}
     volumes:
-      - greenroom-data:/data
+      - moored-data:/data
 
 volumes:
-  greenroom-data:
+  moored-data:

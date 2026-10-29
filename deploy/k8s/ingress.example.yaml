@@ -1,9 +1,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: greenroom
+  name: moored
   labels:
-    app.kubernetes.io/name: greenroom
+    app.kubernetes.io/name: moored
   annotations:
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
@@ -13,7 +13,7 @@ spec:
   tls:
     - hosts:
         - retro.example.internal
-      secretName: greenroom-tls
+      secretName: moored-tls
   rules:
     - host: retro.example.internal
       http:
@@ -22,6 +22,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: greenroom
+                name: moored
                 port:
                   name: http

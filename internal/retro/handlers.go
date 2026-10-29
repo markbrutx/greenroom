@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/markbrutx/greenroom/internal/auth"
-	"github.com/markbrutx/greenroom/internal/live"
-	"github.com/markbrutx/greenroom/internal/web"
+	"github.com/markbrutx/moored/internal/auth"
+	"github.com/markbrutx/moored/internal/live"
+	"github.com/markbrutx/moored/internal/web"
 )
 
 type State struct {

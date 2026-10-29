@@ -6,13 +6,13 @@ SHA256 := $(shell command -v shasum >/dev/null 2>&1 && echo "shasum -a 256" || e
 .PHONY: run test build dist lint docker clean
 
 run:
-	go run ./cmd/greenroom
+	go run ./cmd/moored
 
 test:
 	go test -timeout 90s ./...
 
 build:
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/greenroom ./cmd/greenroom
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/moored ./cmd/moored
 
 dist:
 	rm -rf dist
@@ -22,11 +22,11 @@ dist:
 		arch=$${platform#*/}; \
 		ext=""; \
 		if [ "$$os" = "windows" ]; then ext=".exe"; fi; \
-		out="dist/greenroom_$(VERSION)_$${os}_$${arch}$${ext}"; \
+		out="dist/moored_$(VERSION)_$${os}_$${arch}$${ext}"; \
 		echo "$$out"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o "$$out" ./cmd/greenroom || exit 1; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o "$$out" ./cmd/moored || exit 1; \
 	done
-	cd dist && $(SHA256) greenroom_* > checksums.txt
+	cd dist && $(SHA256) moored_* > checksums.txt
 
 lint:
 	go vet ./...
@@ -34,7 +34,7 @@ lint:
 	sh scripts/no-comments.sh
 
 docker:
-	docker build -t greenroom:$(VERSION) --build-arg VERSION=$(VERSION) .
+	docker build -t moored:$(VERSION) --build-arg VERSION=$(VERSION) .
 
 clean:
 	rm -rf bin dist

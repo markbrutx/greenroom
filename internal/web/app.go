@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/markbrutx/greenroom/internal/config"
-	"github.com/markbrutx/greenroom/internal/live"
-	"github.com/markbrutx/greenroom/internal/store"
+	"github.com/markbrutx/moored/internal/config"
+	"github.com/markbrutx/moored/internal/live"
+	"github.com/markbrutx/moored/internal/store"
 )
 
 //go:embed templates/*.html

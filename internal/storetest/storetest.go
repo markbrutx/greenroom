@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/markbrutx/greenroom/internal/store"
+	"github.com/markbrutx/moored/internal/store"
 )
 
 func Open(t testing.TB) *store.DB {

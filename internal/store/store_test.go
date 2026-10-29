@@ -8,8 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/markbrutx/greenroom/internal/store"
-	"github.com/markbrutx/greenroom/internal/storetest"
+	"github.com/markbrutx/moored/internal/store"
+	"github.com/markbrutx/moored/internal/storetest"
 	_ "modernc.org/sqlite"
 )
 
@@ -60,7 +60,7 @@ func TestMigrateRejectsBadNames(t *testing.T) {
 }
 
 func TestOpenRejectsOtherURLs(t *testing.T) {
-	if _, err := store.Open(context.Background(), "postgres://localhost/greenroom"); err == nil {
+	if _, err := store.Open(context.Background(), "postgres://localhost/moored"); err == nil {
 		t.Fatal("only sqlite: URLs are accepted")
 	}
 }

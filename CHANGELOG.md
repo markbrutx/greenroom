@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+Breaking: Greenroom is now Moored, live at <https://moored.dev>. Rooms and
+data carry over; see the [upgrade notes](docs/deploy.md#upgrade).
+
+- The top bar says moored.dev; `MOORED_NAME` changes it.
+- Environment variables are `MOORED_*`. Moored refuses to start while a
+  `GREENROOM_*` variable is set and names the one to rename.
+- The binary is `moored`, the image is `ghcr.io/markbrutx/moored`, the
+  repository is `github.com/markbrutx/moored`, and the default database file
+  is `moored.db`.
+- Remembered rooms and the theme choice move over in the browser.
+
 ## 0.3.0
 
 Breaking: Greenroom is now a Meet-style retro room tool. 0.3 starts with an

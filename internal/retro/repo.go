@@ -7,7 +7,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/markbrutx/greenroom/internal/store"
+	"github.com/markbrutx/moored/internal/store"
 )
 
 var (

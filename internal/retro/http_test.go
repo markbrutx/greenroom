@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/markbrutx/greenroom/internal/auth"
-	"github.com/markbrutx/greenroom/internal/config"
-	"github.com/markbrutx/greenroom/internal/live"
-	"github.com/markbrutx/greenroom/internal/retro"
-	"github.com/markbrutx/greenroom/internal/storetest"
-	"github.com/markbrutx/greenroom/internal/web"
+	"github.com/markbrutx/moored/internal/auth"
+	"github.com/markbrutx/moored/internal/config"
+	"github.com/markbrutx/moored/internal/live"
+	"github.com/markbrutx/moored/internal/retro"
+	"github.com/markbrutx/moored/internal/storetest"
+	"github.com/markbrutx/moored/internal/web"
 )
 
 type server struct {
@@ -124,7 +124,7 @@ func (s *server) join(c *http.Client, code, name string) (int, string) {
 func (s *server) call(c *http.Client, code, action string, op map[string]any) (int, string) {
 	s.t.Helper()
 	b, _ := json.Marshal(op)
-	resp := s.post(c, "/"+code+"/"+action, string(b), map[string]string{"Content-Type": "application/json", "X-Greenroom": "1"})
+	resp := s.post(c, "/"+code+"/"+action, string(b), map[string]string{"Content-Type": "application/json", "X-Moored": "1"})
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(body)
@@ -510,7 +510,7 @@ func TestDeleteBroadcast(t *testing.T) {
 }
 
 func TestJanitorDeletesIdleRooms(t *testing.T) {
-	s := start(t, map[string]string{"GREENROOM_ROOM_TTL": "2h"}, nil)
+	s := start(t, map[string]string{"MOORED_ROOM_TTL": "2h"}, nil)
 	host := s.client()
 	idle := s.create(host, "Maya", "open")
 	fresh := s.create(host, "Maya", "open")
@@ -645,10 +645,10 @@ func TestSecurityChecks(t *testing.T) {
 		t.Fatalf("cross-origin join: %d", resp.StatusCode)
 	}
 	if resp := s.post(c, "/"+code+"/do", `{"op":"warmup"}`, map[string]string{"Content-Type": "application/json"}); resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("JSON call without X-Greenroom: %d", resp.StatusCode)
+		t.Fatalf("JSON call without X-Moored: %d", resp.StatusCode)
 	}
 	if resp := s.post(c, "/"+code+"/host", `{"op":"delete"}`, map[string]string{"Content-Type": "application/json"}); resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("host call without X-Greenroom: %d", resp.StatusCode)
+		t.Fatalf("host call without X-Moored: %d", resp.StatusCode)
 	}
 	if status, _ := s.do(c, code, map[string]any{"op": "warmup"}); status != http.StatusOK {
 		t.Fatalf("valid op: %d", status)

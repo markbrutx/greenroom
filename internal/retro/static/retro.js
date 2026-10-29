@@ -10,7 +10,7 @@
 
   const $ = (sel, root) => (root || document).querySelector(sel);
 
-  const ROOMS = 'greenroom:rooms';
+  const ROOMS = 'moored:rooms';
   function savedRooms() {
     try { return JSON.parse(localStorage.getItem(ROOMS) || '[]'); } catch (e) { return []; }
   }
@@ -71,7 +71,7 @@
     try {
       r = await fetch(base + path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Greenroom': '1' },
+        headers: { 'Content-Type': 'application/json', 'X-Moored': '1' },
         body: JSON.stringify(body),
       });
     } catch (e) {
@@ -547,7 +547,7 @@
 
   async function resync() {
     try {
-      const r = await fetch(base + '/state', { headers: { 'X-Greenroom': '1' } });
+      const r = await fetch(base + '/state', { headers: { 'X-Moored': '1' } });
       if (away(r.status)) return;
       if (r.ok) apply(await r.json());
     } catch (e) {}
@@ -654,7 +654,7 @@
 
   async function copyForAgent() {
     const url = base + '/export.md';
-    const load = () => fetch(url, { headers: { 'X-Greenroom': '1' } }).then((r) => {
+    const load = () => fetch(url, { headers: { 'X-Moored': '1' } }).then((r) => {
       if (away(r.status)) throw new Error('gone');
       if (!r.ok) throw new Error('export failed');
       return r.text();

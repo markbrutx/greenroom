@@ -5,7 +5,7 @@ vulnerability**. Fixes go into the latest release.
 
 ## Model
 
-Greenroom has no accounts. A room link is the key to a room, so treat it like
+Moored has no accounts. A room link is the key to a room, so treat it like
 a meeting link:
 
 - Room codes are 10 random lowercase letters; the host link carries a separate
@@ -16,9 +16,9 @@ a meeting link:
   HTTPS). Removing someone revokes it on the server and closes their live
   connection.
 - Creating rooms, joining and looking up unknown codes are rate limited per
-  client IP. Set `GREENROOM_TRUSTED_PROXIES` correctly behind a proxy.
+  client IP. Set `MOORED_TRUSTED_PROXIES` correctly behind a proxy.
 - Everyone in a room can edit every card. Data is not encrypted at rest; rooms
-  are deleted after `GREENROOM_ROOM_TTL` without activity.
+  are deleted after `MOORED_ROOM_TTL` without activity.
 
 Serve it over HTTPS, and keep it inside your network unless you are fine with
 anyone who gets a link joining an open room.

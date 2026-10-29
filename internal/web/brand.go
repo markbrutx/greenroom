@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/markbrutx/greenroom/internal/config"
+	"github.com/markbrutx/moored/internal/config"
 )
 
 const maxLogoBytes = 512 << 10
@@ -31,20 +31,20 @@ func loadBrand(cfg *config.Config) (Brand, error) {
 	if cfg.Logo != "" {
 		info, err := os.Stat(cfg.Logo)
 		if err != nil {
-			return b, fmt.Errorf("GREENROOM_LOGO: %w", err)
+			return b, fmt.Errorf("MOORED_LOGO: %w", err)
 		}
 		if info.Size() > maxLogoBytes {
-			return b, fmt.Errorf("GREENROOM_LOGO: %s is larger than 512 KB", cfg.Logo)
+			return b, fmt.Errorf("MOORED_LOGO: %s is larger than 512 KB", cfg.Logo)
 		}
 		ct, ok := map[string]string{
 			".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp",
 			".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".ico": "image/x-icon",
 		}[strings.ToLower(filepath.Ext(cfg.Logo))]
 		if !ok {
-			return b, fmt.Errorf("GREENROOM_LOGO: use an .svg, .png, .webp, .jpg or .ico file")
+			return b, fmt.Errorf("MOORED_LOGO: use an .svg, .png, .webp, .jpg or .ico file")
 		}
 		if b.logo, err = os.ReadFile(cfg.Logo); err != nil {
-			return b, fmt.Errorf("GREENROOM_LOGO: %w", err)
+			return b, fmt.Errorf("MOORED_LOGO: %w", err)
 		}
 		b.logoCT = ct
 	} else {

@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: greenroom
+  name: moored
   labels:
-    app.kubernetes.io/name: greenroom
+    app.kubernetes.io/name: moored
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app.kubernetes.io/name: greenroom
+      app.kubernetes.io/name: moored
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: greenroom
+        app.kubernetes.io/name: moored
     spec:
       securityContext:
         runAsNonRoot: true
@@ -24,15 +24,15 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: greenroom
-          image: ghcr.io/markbrutx/greenroom:0.3.0
+        - name: moored
+          image: ghcr.io/markbrutx/moored:0.4.0
           args: ["serve"]
           env:
-            - name: GREENROOM_DATABASE_URL
-              value: sqlite:/data/greenroom.db
-            - name: GREENROOM_ADDR
+            - name: MOORED_DATABASE_URL
+              value: sqlite:/data/moored.db
+            - name: MOORED_ADDR
               value: ":8080"
-            - name: GREENROOM_ROOM_TTL
+            - name: MOORED_ROOM_TTL
               value: 168h
           ports:
             - name: http
@@ -74,4 +74,4 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: greenroom-data
+            claimName: moored-data

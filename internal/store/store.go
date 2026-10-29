@@ -20,15 +20,15 @@ type DB struct {
 	raw *sql.DB
 }
 
-var ErrLegacy = errors.New("this database was written by Greenroom 0.2 or older; 0.3 starts with an empty database: " +
-	"move the file aside (keep it as a backup) or point GREENROOM_DATABASE_URL at a new file")
+var ErrLegacy = errors.New("this database was written by version 0.2 or older; 0.3 starts with an empty database: " +
+	"move the file aside (keep it as a backup) or point MOORED_DATABASE_URL at a new file")
 
 func Now() int64 { return time.Now().UnixMilli() }
 
 func Open(ctx context.Context, rawURL string) (*DB, error) {
 	p, ok := strings.CutPrefix(rawURL, "sqlite:")
 	if !ok {
-		return nil, errors.New("GREENROOM_DATABASE_URL must start with sqlite:, for example sqlite:/data/greenroom.db")
+		return nil, errors.New("MOORED_DATABASE_URL must start with sqlite:, for example sqlite:/data/moored.db")
 	}
 	p = strings.TrimPrefix(p, "//")
 	if p == "" {

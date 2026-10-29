@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/markbrutx/greenroom/internal/auth"
-	"github.com/markbrutx/greenroom/internal/web"
+	"github.com/markbrutx/moored/internal/auth"
+	"github.com/markbrutx/moored/internal/web"
 )
 
 type homeData struct {

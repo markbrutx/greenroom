@@ -1,17 +1,17 @@
 [Unit]
-Description=Greenroom
+Description=Moored
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=greenroom
-Group=greenroom
+User=moored
+Group=moored
 DynamicUser=no
-EnvironmentFile=/etc/greenroom/greenroom.env
-ExecStart=/usr/local/bin/greenroom serve
-WorkingDirectory=/var/lib/greenroom
-StateDirectory=greenroom
+EnvironmentFile=/etc/moored/moored.env
+ExecStart=/usr/local/bin/moored serve
+WorkingDirectory=/var/lib/moored
+StateDirectory=moored
 Restart=on-failure
 RestartSec=2
 TimeoutStopSec=15
@@ -41,7 +41,7 @@ SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
 CapabilityBoundingSet=
 AmbientCapabilities=
-ReadWritePaths=/var/lib/greenroom
+ReadWritePaths=/var/lib/moored
 
 [Install]
 WantedBy=multi-user.target

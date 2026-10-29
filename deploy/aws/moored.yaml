@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Greenroom on one small EC2 instance behind Caddy
+Description: Moored on one small EC2 instance behind Caddy
 
 Parameters:
   Domain:
@@ -20,7 +20,7 @@ Resources:
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Greenroom web
+      GroupDescription: Moored web
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
         - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
@@ -80,13 +80,13 @@ Resources:
               mkdir -p /usr/local/lib/docker/cli-plugins
               curl -fsSL --retry 5 -o /usr/local/lib/docker/cli-plugins/docker-compose "https://github.com/docker/compose/releases/download/v5.6.1/docker-compose-linux-$(uname -m)"
               chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-              mkdir -p /opt/greenroom
-              cd /opt/greenroom
+              mkdir -p /opt/moored
+              cd /opt/moored
               printf 'TAG=%s\n' "${ImageTag}" > .env
               cat > Caddyfile <<'EOF'
               ${Domain} {
                 encode zstd gzip
-                reverse_proxy greenroom:8080 {
+                reverse_proxy moored:8080 {
                   flush_interval -1
                 }
               }
@@ -96,14 +96,14 @@ Resources:
               fi
               cat > compose.yml <<'EOF'
               services:
-                greenroom:
-                  image: ghcr.io/markbrutx/greenroom:${!TAG}
+                moored:
+                  image: ghcr.io/markbrutx/moored:${!TAG}
                   restart: unless-stopped
                   read_only: true
                   security_opt: [no-new-privileges:true]
                   cap_drop: [ALL]
                   environment:
-                    GREENROOM_TRUSTED_PROXIES: 172.16.0.0/12
+                    MOORED_TRUSTED_PROXIES: 172.16.0.0/12
                   volumes:
                     - data:/data
                 caddy:

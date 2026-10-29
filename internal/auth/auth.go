@@ -17,7 +17,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/markbrutx/greenroom/internal/store"
+	"github.com/markbrutx/moored/internal/store"
 )
 
 //go:embed migrations/*.sql
@@ -25,9 +25,9 @@ var migrations embed.FS
 
 const (
 	CookiePrefix = "gr_"
-	NameCookie   = "greenroom_name"
+	NameCookie   = "moored_name"
 	CookieLength = 30 * 24 * time.Hour
-	APIHeader    = "X-Greenroom"
+	APIHeader    = "X-Moored"
 	MaxNameRunes = 40
 )
 

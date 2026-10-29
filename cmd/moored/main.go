@@ -14,25 +14,25 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"github.com/markbrutx/greenroom/internal/auth"
-	"github.com/markbrutx/greenroom/internal/config"
-	"github.com/markbrutx/greenroom/internal/live"
-	"github.com/markbrutx/greenroom/internal/retro"
-	"github.com/markbrutx/greenroom/internal/store"
-	"github.com/markbrutx/greenroom/internal/web"
+	"github.com/markbrutx/moored/internal/auth"
+	"github.com/markbrutx/moored/internal/config"
+	"github.com/markbrutx/moored/internal/live"
+	"github.com/markbrutx/moored/internal/retro"
+	"github.com/markbrutx/moored/internal/store"
+	"github.com/markbrutx/moored/internal/web"
 )
 
 var version = "dev"
 
-const usage = `Greenroom: self-hosted retro rooms. Create a room, share the link, export for your agent.
+const usage = `Moored: self-hosted retro rooms. Create a room, share the link, export for your agent.
 
 Usage:
-  greenroom [serve]        start the server
-  greenroom backup FILE    write a consistent copy of the SQLite database to FILE
-  greenroom health         exit 0 when the local server answers /healthz
-  greenroom version        print the version
+  moored [serve]        start the server
+  moored backup FILE    write a consistent copy of the SQLite database to FILE
+  moored health         exit 0 when the local server answers /healthz
+  moored version        print the version
 
-Configuration comes from GREENROOM_* environment variables; see README.md.
+Configuration comes from MOORED_* environment variables; see README.md.
 `
 
 func main() {
@@ -46,14 +46,14 @@ func main() {
 		err = serve()
 	case "backup":
 		if len(os.Args) != 3 {
-			err = errors.New("usage: greenroom backup FILE")
+			err = errors.New("usage: moored backup FILE")
 		} else {
 			err = backup(os.Args[2])
 		}
 	case "health":
 		err = health()
 	case "version", "--version", "-v":
-		fmt.Println("greenroom", fullVersion())
+		fmt.Println("moored", fullVersion())
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 	default:
@@ -61,7 +61,7 @@ func main() {
 		err = fmt.Errorf("unknown command %q", cmd)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "greenroom:", err)
+		fmt.Fprintln(os.Stderr, "moored:", err)
 		os.Exit(1)
 	}
 }
@@ -81,9 +81,9 @@ func fullVersion() string {
 }
 
 func backup(file string) error {
-	url := os.Getenv("GREENROOM_DATABASE_URL")
+	url := os.Getenv("MOORED_DATABASE_URL")
 	if url == "" {
-		url = "sqlite:greenroom.db"
+		url = "sqlite:moored.db"
 	}
 	if _, err := os.Stat(file); err == nil {
 		return fmt.Errorf("%s already exists; pick a new file name", file)
@@ -102,7 +102,7 @@ func backup(file string) error {
 }
 
 func health() error {
-	addr := os.Getenv("GREENROOM_ADDR")
+	addr := os.Getenv("MOORED_ADDR")
 	if addr == "" {
 		addr = ":8080"
 	}
@@ -115,7 +115,7 @@ func health() error {
 	}
 	scheme := "http"
 	client := &http.Client{Timeout: 3 * time.Second}
-	if os.Getenv("GREENROOM_TLS_CERT") != "" {
+	if os.Getenv("MOORED_TLS_CERT") != "" {
 		scheme = "https"
 		client.Transport = insecureLocalTransport()
 	}
@@ -205,7 +205,7 @@ func serve() error {
 			errc <- srv.Serve(ln)
 		}
 	}()
-	log.Info("greenroom started", "version", fullVersion(), "addr", ln.Addr().String(),
+	log.Info("moored started", "version", fullVersion(), "addr", ln.Addr().String(),
 		"tls", cfg.TLSCert != "", "room_ttl", cfg.RoomTTL.String())
 
 	select {

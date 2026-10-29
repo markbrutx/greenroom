@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const ROOMS = 'greenroom:rooms';
+  const ROOMS = 'moored:rooms';
   const box = document.getElementById('my-rooms');
   const list = document.getElementById('my-rooms-list');
   const tpl = document.getElementById('tpl-room');

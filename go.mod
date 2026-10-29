@@ -1,4 +1,4 @@
-module github.com/markbrutx/greenroom
+module github.com/markbrutx/moored
 
 go 1.26.0
 

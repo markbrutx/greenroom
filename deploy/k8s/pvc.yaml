@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: greenroom-data
+  name: moored-data
   labels:
-    app.kubernetes.io/name: greenroom
+    app.kubernetes.io/name: moored
 spec:
   accessModes:
     - ReadWriteOnce
