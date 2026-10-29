@@ -114,6 +114,20 @@ func (h *Hub) Here(room string) []string {
 	return h.hereLocked(room)
 }
 
+func (h *Hub) HereIDs(room string) []int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	seen := map[int64]bool{}
+	out := []int64{}
+	for s := range h.rooms[room] {
+		if !s.Waiting && !s.gone && !seen[s.ID] {
+			seen[s.ID] = true
+			out = append(out, s.ID)
+		}
+	}
+	return out
+}
+
 func (h *Hub) HostHere(room string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()

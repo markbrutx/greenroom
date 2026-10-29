@@ -52,12 +52,13 @@ func DefaultLimits() Limits {
 }
 
 type Service struct {
-	pool   *Pool
-	repo   *Repo
-	locks  *Locks
-	app    *web.App
-	auth   *auth.Auth
-	limits Limits
+	pool    *Pool
+	repo    *Repo
+	locks   *Locks
+	app     *web.App
+	auth    *auth.Auth
+	limits  Limits
+	reveals reveals
 
 	homeT *template.Template
 	joinT *template.Template

@@ -8,11 +8,18 @@
 <h2 class="block-head">Warm-up</h2>
 <div class="warmup"><textarea id="warmup" rows="1" maxlength="300" aria-label="Warm-up question"></textarea><button class="icon-btn" type="button" id="warmup-dice" title="Another question" aria-label="Another question">{{icon "dice"}}</button></div>
 <div class="col col-w" id="col-w"><div class="cards"></div><button class="add" type="button" data-add="w">+ Answer</button></div>
+<h2 class="block-head">Happiness</h2>
+<div class="mood" id="mood">
+<div class="faces" role="radiogroup" aria-label="{{.Data.MoodQ}}">{{range .Data.Faces}}<button class="face" type="button" role="radio" aria-checked="false" data-score="{{.Score}}" data-tip="{{.Label}}" aria-label="{{.Score}} of 5, {{.Label}}"><span class="face-fill"></span><span class="face-emoji" aria-hidden="true">{{.Emoji}}</span><span class="face-n"></span></button>{{end}}</div>
+<div class="mood-text"><p class="mood-q">{{.Data.MoodQ}}</p><p class="mood-status" id="mood-status" aria-live="polite"></p></div>
+<div class="mood-side"><p class="mood-avg" id="mood-avg" hidden><b id="mood-score"></b><span>/ 5</span></p><button class="btn btn-sm" type="button" id="mood-show" hidden>Show results</button><button class="btn btn-sm btn-quiet" type="button" id="mood-reset" hidden>Vote again</button></div>
+</div>
 <h2 class="block-head">Board <button class="icon-btn" type="button" id="cols-dice" title="Another column set, while the columns are empty" aria-label="Another column set">{{icon "dice"}}</button></h2>
 <div class="board" id="board">
 <div class="col col-a" id="col-a"><h3 class="col-title">Actions</h3><div class="cards"></div><button class="add" type="button" data-add="a">+ Action</button></div>
 </div>
 <div class="picker" id="picker" role="menu" aria-label="Add a reaction" hidden></div>
+<div class="tip" id="tip" role="tooltip" hidden></div>
 <div class="knocks" id="knocks" role="region" aria-label="People asking to join" aria-live="polite" hidden></div>
 <dialog class="panel" id="panel" aria-labelledby="panel-title">
 <div class="panel-head"><h2 id="panel-title">Room <span class="code">{{.Data.Code}}</span></h2><button class="icon-btn" type="button" id="panel-close" aria-label="Close">{{icon "close"}}</button></div>

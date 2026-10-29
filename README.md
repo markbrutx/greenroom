@@ -33,8 +33,9 @@
 2. **Share the link.** People type their name. In an *Ask to join* room you see
    "Maya wants to join" and click Admit or Deny; they get in without
    reloading.
-3. **Run the retro.** Warm-up question, board columns from a template set,
-   cards, reactions and actions with an owner, all live.
+3. **Run the retro.** Warm-up question, an anonymous happiness check, board
+   columns from a template set, cards, reactions and actions with an owner,
+   all live.
 4. **Export for your agent.** *Copy .md* puts the whole retro on the
    clipboard as Markdown, ready for a prompt; *Download .md* saves it.
 5. **Delete it.** The host deletes the room for everyone. Rooms also delete

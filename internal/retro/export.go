@@ -69,6 +69,8 @@ func Markdown(s *State, date string) string {
 		b.WriteString("- " + oneLine(c.Body) + " (" + c.Author + ")" + reactionSuffix(c) + "\n")
 	}
 
+	b.WriteString(happiness(s.Mood))
+
 	for i, h := range s.Cols {
 		b.WriteString("\n## " + oneLine(h) + "\n\n")
 		cards := byCol[strconv.Itoa(i)]
@@ -92,6 +94,32 @@ func Markdown(s *State, date string) string {
 		b.WriteString("- [ ] " + oneLine(c.Body) + " (" + owner + ")" + reactionSuffix(c) + "\n")
 	}
 	return b.String()
+}
+
+func happiness(m Mood) string {
+	if m.Votes == 0 {
+		return ""
+	}
+	head := "\n## Happiness: " + MoodQuestion + "\n\n"
+	if !m.Shown {
+		return head + "_" + plural(m.Votes, "vote") + ", results not shown yet._\n"
+	}
+	var parts []string
+	for i := len(Faces) - 1; i >= 0; i-- {
+		if n := m.Dist[i]; n > 0 {
+			f := Faces[i]
+			parts = append(parts, f.Emoji+" "+f.Label+" ("+strconv.Itoa(f.Score)+"): "+strconv.Itoa(n))
+		}
+	}
+	return head + "Average " + strconv.FormatFloat(m.Average(), 'f', 1, 64) + " out of 5 from " +
+		plural(m.Votes, "anonymous vote") + ". " + strings.Join(parts, ", ") + "\n"
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return strconv.Itoa(n) + " " + word + "s"
 }
 
 func reactionSuffix(c Card) string {

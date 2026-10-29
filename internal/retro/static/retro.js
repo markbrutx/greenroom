@@ -29,6 +29,13 @@
   const tplCol = $('#tpl-col').content.firstElementChild;
   const picker = $('#picker');
   const board = $('#board');
+  const tip = $('#tip');
+  let tipFor = null;
+  const moodBox = $('#mood');
+  const faces = [...moodBox.querySelectorAll('.face')];
+  let mood = Object.assign({ votes: 0, shown: false, mine: 0 }, S.mood);
+  let moodChain = Promise.resolve();
+  let resetTimer = 0;
 
   const cards = new Map();
   const pending = new Map();
@@ -217,8 +224,60 @@
     }
   }
 
+  function plural(n, word) {
+    return n + ' ' + word + (n === 1 ? '' : 's');
+  }
+
+  function whoReacted(list) {
+    const all = list.filter((n) => n !== me);
+    if (list.includes(me)) all.push('you');
+    if (all.length === 1) return all[0] === 'you' ? 'You' : all[0];
+    if (all.length > 8) return all.slice(0, 7).join(', ') + ' and ' + (all.length - 7) + ' more';
+    return all.slice(0, -1).join(', ') + ' and ' + all[all.length - 1];
+  }
+
+  function placeTip() {
+    if (!tipFor) return;
+    if (!document.contains(tipFor)) {
+      hideTip();
+      return;
+    }
+    const r = tipFor.getBoundingClientRect();
+    const w = tip.offsetWidth;
+    const h = tip.offsetHeight;
+    const bar = document.querySelector('.topbar');
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+    let top = r.top - h - 8;
+    if (top < (bar ? bar.getBoundingClientRect().bottom : 0) + 4) top = r.bottom + 8;
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+  }
+
+  function showTip(t) {
+    if (!t || !t.dataset.tip) {
+      hideTip();
+      return;
+    }
+    const fresh = tipFor !== t || tip.hidden;
+    tipFor = t;
+    tip.textContent = t.dataset.tip;
+    tip.hidden = false;
+    placeTip();
+    if (fresh) {
+      tip.classList.remove('on');
+      requestAnimationFrame(() => { if (tipFor === t) tip.classList.add('on'); });
+    }
+  }
+
+  function hideTip() {
+    tipFor = null;
+    tip.classList.remove('on');
+    tip.hidden = true;
+  }
+
   function renderReacts(el) {
     const box = $('.reacts', el);
+    const tipped = tipFor && box.contains(tipFor) ? tipFor.dataset.emoji : '';
     box.replaceChildren();
     const r = el._c.r || {};
     EMOJI.forEach((e) => {
@@ -230,10 +289,13 @@
       b.className = 'chip' + (mine ? ' mine' : '');
       b.dataset.emoji = e;
       b.setAttribute('aria-pressed', mine ? 'true' : 'false');
-      b.title = who.join(', ');
+      b.dataset.tip = whoReacted(who);
+      b.setAttribute('aria-label', e + ' ' + who.length + ', from ' + b.dataset.tip);
       b.textContent = e + ' ' + who.length;
       box.append(b);
+      if (tipped === e) showTip(b);
     });
+    if (tipped && !box.contains(tipFor)) hideTip();
     box.hidden = !box.childElementCount;
     $('.react-add', el).disabled = !el._c.id;
   }
@@ -526,6 +588,72 @@
       return s;
     }));
     renderPeople();
+    renderMood();
+  }
+
+  function renderMood() {
+    const m = mood;
+    const mine = m.mine || 0;
+    const dist = m.shown && m.dist ? m.dist : [];
+    const top = Math.max(1, ...dist);
+    moodBox.classList.toggle('shown', !!m.shown);
+    moodBox.classList.toggle('voted', !m.shown && mine > 0);
+    faces.forEach((b) => {
+      const score = Number(b.dataset.score);
+      const f = S.faces[score - 1];
+      const n = dist[score - 1] || 0;
+      b.classList.toggle('mine', mine === score);
+      b.classList.toggle('zero', !!m.shown && n === 0);
+      b.setAttribute('aria-checked', mine === score ? 'true' : 'false');
+      b.setAttribute('aria-disabled', m.shown ? 'true' : 'false');
+      b.style.setProperty('--p', m.shown ? String(n / top) : '0');
+      $('.face-n', b).textContent = m.shown && n ? String(n) : '';
+      b.dataset.tip = m.shown ? f.label + ' \u00b7 ' + plural(n, 'vote') + (mine === score ? ', including yours' : '') : f.label;
+      b.setAttribute('aria-label', score + ' of 5, ' + f.label + (m.shown ? ', ' + plural(n, 'vote') : ''));
+      if (tipFor === b) showTip(b);
+    });
+    const total = Math.max(m.votes, here.length);
+    let status;
+    if (m.shown) status = m.votes ? plural(m.votes, 'anonymous vote') : 'No votes left';
+    else if (!m.votes) status = 'Anonymous. Results open once everyone has voted.';
+    else if (m.votes >= total && m.votes >= 2) status = 'Everyone voted \u00b7 results in a moment';
+    else status = m.votes + ' of ' + total + ' voted \u00b7 anonymous';
+    $('#mood-status').textContent = status;
+    let sum = 0;
+    dist.forEach((n, i) => { sum += n * (i + 1); });
+    const votes = dist.reduce((a, n) => a + n, 0);
+    $('#mood-avg').hidden = !m.shown;
+    $('#mood-score').textContent = votes ? (Math.round(sum / votes * 10) / 10).toFixed(1) : '\u2013';
+    $('#mood-show').hidden = !(S.host && !m.shown && m.votes > 0);
+    $('#mood-reset').hidden = !(S.host && m.shown);
+    if (!m.shown) resetAsk(false);
+  }
+
+  function setMood(next) {
+    const mine = mood.mine || 0;
+    mood = Object.assign({}, next, { mine: next.votes ? (next.mine !== undefined ? next.mine : mine) : 0 });
+    renderMood();
+  }
+
+  function vote(score) {
+    if (mood.shown) return;
+    const before = mood.mine || 0;
+    const next = before === score ? 0 : score;
+    const votes = mood.votes + (before ? 0 : 1) - (next ? 0 : 1);
+    mood = Object.assign({}, mood, { mine: next, votes });
+    renderMood();
+    moodChain = moodChain
+      .then(() => api({ op: 'mood', i: next }))
+      .then((res) => { if (res && res.mood) setMood(Object.assign({ mine: 0 }, res.mood)); })
+      .catch(() => resync());
+  }
+
+  function resetAsk(on) {
+    const b = $('#mood-reset');
+    clearTimeout(resetTimer);
+    b.classList.toggle('ask', on);
+    b.textContent = on ? 'Clear the results?' : 'Vote again';
+    if (on) resetTimer = setTimeout(() => resetAsk(false), 4000);
   }
 
   function apply(s) {
@@ -536,6 +664,7 @@
     renderPanel();
     renderKnocks();
     meta(s);
+    if (s.mood) setMood(Object.assign({ mine: 0 }, s.mood));
     const seen = new Set();
     s.cards.forEach((c) => {
       seen.add(c.id);
@@ -553,7 +682,23 @@
     } catch (e) {}
   }
 
+  document.addEventListener('mouseover', (e) => {
+    const t = e.target.closest('[data-tip]');
+    if (t !== tipFor) showTip(t);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (tipFor && !(e.relatedTarget && tipFor.contains(e.relatedTarget))) hideTip();
+  });
+  document.addEventListener('focusin', (e) => {
+    const t = e.target.closest('[data-tip]');
+    if (t && t.matches(':focus-visible')) showTip(t);
+  });
+  document.addEventListener('focusout', (e) => {
+    if (tipFor && tipFor.contains(e.target)) hideTip();
+  });
+
   document.addEventListener('pointerdown', (e) => {
+    if (tipFor && !tipFor.contains(e.target)) hideTip();
     if (!picker.hidden && !picker.contains(e.target) && !(picker._anchor && picker._anchor.contains(e.target))) closePicker(false);
     if (openEl && !openEl.contains(e.target) && !picker.contains(e.target)) leave(openEl);
   }, true);
@@ -569,8 +714,25 @@
     }
   });
 
-  window.addEventListener('resize', placePicker);
-  window.addEventListener('scroll', placePicker, { passive: true });
+  window.addEventListener('resize', () => { placePicker(); placeTip(); });
+  window.addEventListener('scroll', () => { placePicker(); placeTip(); }, { passive: true });
+
+  faces.forEach((b) => b.addEventListener('click', () => vote(Number(b.dataset.score))));
+  $('#mood-show').addEventListener('click', () => {
+    const b = $('#mood-show');
+    b.disabled = true;
+    hostApi({ op: 'moodshow' }).catch(() => resync()).finally(() => { b.disabled = false; });
+  });
+  $('#mood-reset').addEventListener('click', () => {
+    const b = $('#mood-reset');
+    if (!b.classList.contains('ask')) {
+      resetAsk(true);
+      return;
+    }
+    resetAsk(false);
+    b.disabled = true;
+    hostApi({ op: 'moodreset' }).catch(() => resync()).finally(() => { b.disabled = false; });
+  });
 
   document.addEventListener('click', (e) => {
     const add = e.target.closest('[data-add]');
@@ -844,6 +1006,7 @@
         case 'card': upsert(m.c, m.tmp); diceState(); break;
         case 'del': drop(m.id); diceState(); break;
         case 'meta': meta(m); break;
+        case 'mood': setMood(m.mood); break;
         case 'here': renderHere(m.names); break;
         case 'react': {
           const el = cards.get(m.id);

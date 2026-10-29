@@ -41,6 +41,7 @@ type Room struct {
 	Cols       []string
 	CreatedAt  int64
 	ActiveAt   int64
+	MoodShown  bool
 }
 
 type Member struct {
@@ -100,12 +101,12 @@ func (r *Repo) CreateRoom(ctx context.Context, code, secret string, open bool, w
 	return room, m, tx.Commit()
 }
 
-const roomCols = `id, code, host_secret, open, warmup, cols, created_at, active_at`
+const roomCols = `id, code, host_secret, open, warmup, cols, created_at, active_at, mood_shown`
 
 func scanRoom(sc interface{ Scan(...any) error }) (*Room, error) {
 	x := &Room{}
 	var cols string
-	if err := sc.Scan(&x.ID, &x.Code, &x.HostSecret, &x.Open, &x.Warmup, &cols, &x.CreatedAt, &x.ActiveAt); err != nil {
+	if err := sc.Scan(&x.ID, &x.Code, &x.HostSecret, &x.Open, &x.Warmup, &cols, &x.CreatedAt, &x.ActiveAt, &x.MoodShown); err != nil {
 		return nil, notFound(err)
 	}
 	if err := json.Unmarshal([]byte(cols), &x.Cols); err != nil {
@@ -372,6 +373,56 @@ func (r *Repo) React(ctx context.Context, roomID, cardID int64, who, emoji strin
 	}
 	n64, err := res.RowsAffected()
 	return n64 > 0, err
+}
+
+func (r *Repo) SetMood(ctx context.Context, roomID, memberID int64, score int) error {
+	if score == 0 {
+		_, err := r.db.Exec(ctx, `delete from moods where member_id = ? and room_id = ?
+			and exists (select 1 from rooms where id = ? and not mood_shown)`, memberID, roomID, roomID)
+		return err
+	}
+	return affected(r.db.Exec(ctx, `insert into moods (member_id, room_id, score, created_at)
+		select ?, ?, ?, ? where exists (select 1 from rooms where id = ? and not mood_shown)
+		on conflict (member_id) do update set score = excluded.score`, memberID, roomID, score, store.Now(), roomID))
+}
+
+func (r *Repo) Moods(ctx context.Context, roomID int64) (map[int64]int, error) {
+	rows, err := r.db.Query(ctx, `select m.member_id, m.score from moods m
+		join members x on x.id = m.member_id
+		where m.room_id = ? and x.status = 'admitted'`, roomID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var score int
+		if err := rows.Scan(&id, &score); err != nil {
+			return nil, err
+		}
+		out[id] = score
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) ShowMoods(ctx context.Context, roomID int64) error {
+	return affected(r.db.Exec(ctx, `update rooms set mood_shown = 1 where id = ?`, roomID))
+}
+
+func (r *Repo) ResetMoods(ctx context.Context, roomID int64) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(ctx, `delete from moods where room_id = ?`, roomID); err != nil {
+		return err
+	}
+	if err := affected(tx.Exec(ctx, `update rooms set mood_shown = 0 where id = ?`, roomID)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *Repo) BoardCardCount(ctx context.Context, roomID int64) (int, error) {

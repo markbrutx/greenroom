@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Happiness check: everyone picks one of five faces, anonymously. Results
+  open by themselves a few seconds after everyone in the room has voted, or
+  when the host clicks Show results. The host can start a new vote.
+  *Copy .md* includes the average and the spread.
+- Hover a reaction to see who left it.
+
 ## 0.4.0
 
 Breaking: Greenroom is now Moored, live at <https://moored.dev>. Rooms and

@@ -110,6 +110,54 @@ select.owner:focus { outline: none; border-color: var(--accent); }
 .picker button:hover { background: var(--surface-2); }
 .picker button.mine { background: var(--accent-soft); }
 
+.tip {
+  position: fixed; z-index: 60; max-width: 17rem; padding: 0.375rem 0.625rem;
+  border-radius: 0.5rem; background: var(--ink); color: var(--bg); box-shadow: var(--shadow-lg);
+  font: 600 .8rem/1.4 var(--font); pointer-events: none;
+  opacity: 0; transform: translateY(0.125rem); transition: opacity .12s ease, transform .12s ease;
+}
+.tip.on { opacity: 1; transform: none; }
+
+.mood { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin-bottom: 0.25rem; }
+.faces { display: flex; gap: 0.5rem; flex: none; }
+.face {
+  position: relative; isolation: isolate; overflow: hidden; display: grid; place-items: center;
+  width: 3.25rem; height: 3.25rem; padding: 0; flex: none;
+  border: 1px solid var(--line); border-radius: 0.875rem; background: var(--surface); box-shadow: var(--shadow-sm);
+  transition: border-color .15s ease, transform .12s ease;
+}
+.face[data-score="1"] { --face: #e5484d; }
+.face[data-score="2"] { --face: #f2763b; }
+.face[data-score="3"] { --face: #f0b429; }
+.face[data-score="4"] { --face: #8cc63f; }
+.face[data-score="5"] { --face: #30a46c; }
+.face-emoji { font-size: 1.55rem; line-height: 1; transition: transform .15s ease, filter .2s ease, opacity .2s ease; }
+.face-fill {
+  position: absolute; inset: auto 0 0; z-index: -1; height: calc(var(--p, 0) * 100%);
+  background: color-mix(in srgb, var(--face) 32%, transparent);
+  transition: height .7s cubic-bezier(.2, .8, .2, 1);
+}
+.face-n { position: absolute; top: 0.3125rem; right: 0.4375rem; font: 700 .68rem/1 var(--font); color: var(--ink); }
+.face:hover { border-color: var(--line-strong); }
+.face:hover .face-emoji { transform: scale(1.12); }
+.face:active { transform: scale(.95); }
+.face.mine { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.mood.voted .face:not(.mine) .face-emoji { filter: grayscale(1); opacity: .4; }
+.mood.voted .face:not(.mine):hover .face-emoji { filter: none; opacity: 1; }
+.mood.shown .face { cursor: default; }
+.mood.shown .face:hover { border-color: var(--line); }
+.mood.shown .face.mine { border-color: var(--ink); }
+.mood.shown .face:hover .face-emoji, .mood.shown .face:active { transform: none; }
+.mood.shown .face.zero .face-emoji { filter: grayscale(1); opacity: .3; }
+.mood-text { flex: 0 1 auto; min-width: 0; }
+.mood-q { margin: 0; font: 600 1rem/1.35 var(--font-display); }
+.mood-status { margin: 0.125rem 0 0; min-height: 1.2em; font-size: .85rem; color: var(--muted); }
+.mood-side { display: flex; align-items: center; gap: 0.75rem; flex: none; }
+.mood-avg { display: flex; align-items: baseline; gap: 0.25rem; margin: 0; }
+.mood-avg b { font: 700 1.75rem/1 var(--font-display); letter-spacing: -.02em; }
+.mood-avg span { font-size: .9rem; color: var(--muted); }
+#mood-reset.ask { color: var(--danger); }
+
 @media (hover: none) {
   .react-add, .rcard .del { opacity: .6; }
   .react-add, .rcard .del, select.owner { height: 2.125rem; }

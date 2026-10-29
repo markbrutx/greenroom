@@ -806,3 +806,87 @@ func TestEventsBroadcastCards(t *testing.T) {
 	s.do(alice, code, map[string]any{"op": "del", "id": added.C.ID})
 	bs.waitFor(`"t":"del"`)
 }
+
+func TestHappiness(t *testing.T) {
+	s := start(t, nil, nil)
+	maya, jonas, sam := s.client(), s.client(), s.client()
+	code := s.create(maya, "Maya", "open")
+	s.join(jonas, code, "Jonas")
+	s.join(sam, code, "Sam")
+
+	if status, _ := s.do(jonas, code, map[string]any{"op": "mood", "i": 6}); status != http.StatusBadRequest {
+		t.Fatalf("score 6: %d", status)
+	}
+	if status, _ := s.host(maya, code, map[string]any{"op": "moodshow"}); status != http.StatusConflict {
+		t.Fatalf("show with no votes: %d", status)
+	}
+	s.do(maya, code, map[string]any{"op": "mood", "i": 5})
+	s.do(jonas, code, map[string]any{"op": "mood", "i": 2})
+	s.do(jonas, code, map[string]any{"op": "mood", "i": 3})
+	st := s.state(jonas, code)
+	if st.Mood.Votes != 2 || st.Mood.Mine != 3 || st.Mood.Shown || st.Mood.Dist != nil {
+		t.Fatalf("hidden votes: %+v", st.Mood)
+	}
+	if st := s.state(sam, code); st.Mood.Mine != 0 || st.Mood.Dist != nil {
+		t.Fatalf("other people's votes must not leak: %+v", st.Mood)
+	}
+	if _, body := s.get(sam, "/"+code+"/export.md"); !strings.Contains(body, "2 votes, results not shown yet") || strings.Contains(body, "Average") {
+		t.Fatalf("export before reveal:\n%s", body)
+	}
+	if status, _ := s.host(jonas, code, map[string]any{"op": "moodshow"}); status != http.StatusForbidden {
+		t.Fatalf("guest reveal: %d", status)
+	}
+	if status, _ := s.host(maya, code, map[string]any{"op": "moodshow"}); status != http.StatusOK {
+		t.Fatalf("reveal: %d", status)
+	}
+	st = s.state(sam, code)
+	if !st.Mood.Shown || len(st.Mood.Dist) != 5 || st.Mood.Dist[4] != 1 || st.Mood.Dist[2] != 1 || st.Mood.Average() != 4 {
+		t.Fatalf("revealed: %+v", st.Mood)
+	}
+	if status, _ := s.do(sam, code, map[string]any{"op": "mood", "i": 1}); status != http.StatusConflict {
+		t.Fatalf("vote after reveal: %d", status)
+	}
+	if _, body := s.get(sam, "/"+code+"/export.md"); !strings.Contains(body, "Average 4.0 out of 5 from 2 anonymous votes. 😄 Great (5): 1, 😐 Okay (3): 1") {
+		t.Fatalf("export after reveal:\n%s", body)
+	}
+	if status, _ := s.host(maya, code, map[string]any{"op": "moodreset"}); status != http.StatusOK {
+		t.Fatalf("reset: %d", status)
+	}
+	if st := s.state(maya, code); st.Mood.Votes != 0 || st.Mood.Shown || st.Mood.Mine != 0 {
+		t.Fatalf("after reset: %+v", st.Mood)
+	}
+	s.do(sam, code, map[string]any{"op": "mood", "i": 4})
+	s.do(sam, code, map[string]any{"op": "mood", "i": 0})
+	if st := s.state(sam, code); st.Mood.Votes != 0 || st.Mood.Mine != 0 {
+		t.Fatalf("take the vote back: %+v", st.Mood)
+	}
+	if _, body := s.get(sam, "/"+code+"/export.md"); strings.Contains(body, "Happiness") {
+		t.Fatalf("no votes, no section:\n%s", body)
+	}
+}
+
+func TestHappinessAutoReveal(t *testing.T) {
+	s := start(t, nil, nil)
+	maya, jonas := s.client(), s.client()
+	code := s.create(maya, "Maya", "open")
+	s.join(jonas, code, "Jonas")
+	ev := s.stream(maya, code)
+	s.stream(jonas, code)
+	ev.waitFor(`"Jonas"`)
+	s.do(maya, code, map[string]any{"op": "mood", "i": 4})
+	if line := ev.waitFor(`"t":"mood"`); strings.Contains(line, `"shown":true`) {
+		t.Fatalf("one of two voted, results stay hidden: %s", line)
+	}
+	s.do(jonas, code, map[string]any{"op": "mood", "i": 2})
+	if line := ev.waitFor(`"t":"mood"`); strings.Contains(line, `"shown":true`) {
+		t.Fatalf("results wait a moment so people can change their mind: %s", line)
+	}
+	if status, _ := s.do(jonas, code, map[string]any{"op": "mood", "i": 3}); status != http.StatusOK {
+		t.Fatalf("change of mind right after voting: %d", status)
+	}
+	ev.waitFor(`"t":"mood"`)
+	line := ev.waitFor(`"t":"mood"`)
+	if !strings.Contains(line, `"shown":true`) || !strings.Contains(line, `"dist":[0,0,1,1,0]`) || strings.Contains(line, "mine") {
+		t.Fatalf("everyone here voted, results open for all: %s", line)
+	}
+}

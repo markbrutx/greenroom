@@ -28,6 +28,9 @@ type State struct {
 	HostSecret string   `json:"hostSecret,omitempty"`
 	Here       []string `json:"here"`
 	Emojis     []string `json:"emojis"`
+	Faces      []Face   `json:"faces"`
+	Mood       Mood     `json:"mood"`
+	MoodQ      string   `json:"-"`
 	TTL        string   `json:"ttl"`
 	Welcome    bool     `json:"welcome,omitempty"`
 	created    int64
@@ -90,10 +93,15 @@ func (s *Service) load(r *http.Request, room *Room, m *Member) (*State, error) {
 	for i := range cards {
 		s.locks.Decorate(room.ID, &cards[i])
 	}
+	votes, err := s.repo.Moods(ctx, room.ID)
+	if err != nil {
+		return nil, err
+	}
 	st := &State{
 		Code: room.Code, Date: s.fullDate(room.CreatedAt), Warmup: room.Warmup, Cols: room.Cols, Cards: cards,
 		Me: m.Name, MeID: m.ID, Host: m.Host, Open: room.Open, Members: members,
 		Here: s.app.Hub.Here(topic(room.Code)), Emojis: Emojis, TTL: s.ttlText(), created: room.CreatedAt,
+		Faces: Faces, Mood: summarize(votes, room.MoodShown, m.ID), MoodQ: MoodQuestion,
 	}
 	if m.Host {
 		st.HostSecret = room.HostSecret
@@ -237,6 +245,38 @@ func (s *Service) hostOp(w http.ResponseWriter, r *http.Request, room *Room, m *
 		s.app.Log.Info("member removed", "room", room.Code, "member", x.ID)
 		hub.Kick(tp, x.ID, map[string]any{"t": "removed"})
 		s.sendMembers(r, room)
+		if _, err := s.sendMood(ctx, room, m.ID, false); err != nil {
+			s.app.Log.Error("send mood", "err", err)
+		}
+	case "moodshow":
+		votes, err := s.repo.Moods(ctx, room.ID)
+		if err != nil {
+			s.dbFail(w, r, err)
+			return
+		}
+		if len(votes) == 0 {
+			fail(w, http.StatusConflict, "Nobody has voted yet.")
+			return
+		}
+		if err := s.repo.ShowMoods(ctx, room.ID); err != nil {
+			gone(err, "This room was deleted.")
+			return
+		}
+		room.MoodShown = true
+		if _, err := s.sendMood(ctx, room, m.ID, false); err != nil {
+			s.dbFail(w, r, err)
+			return
+		}
+	case "moodreset":
+		if err := s.repo.ResetMoods(ctx, room.ID); err != nil {
+			gone(err, "This room was deleted.")
+			return
+		}
+		room.MoodShown = false
+		if _, err := s.sendMood(ctx, room, m.ID, false); err != nil {
+			s.dbFail(w, r, err)
+			return
+		}
 	case "access":
 		if err := s.repo.SetOpen(ctx, room.ID, o.Open); err != nil {
 			s.dbFail(w, r, err)
@@ -423,6 +463,33 @@ func (s *Service) do(w http.ResponseWriter, r *http.Request, x *Room, m *Member)
 			return
 		}
 		hub.Send(rm, map[string]any{"t": "react", "id": o.ID, "emoji": o.Emoji, "who": u, "on": o.On})
+
+	case "mood":
+		if o.I < 0 || o.I > len(Faces) {
+			fail(w, http.StatusBadRequest, "Pick a face from 1 to "+strconv.Itoa(len(Faces))+", or 0 to take your vote back.")
+			return
+		}
+		closed := "The results are already out. The host can start a new vote."
+		if x.MoodShown {
+			fail(w, http.StatusConflict, closed)
+			return
+		}
+		err := s.repo.SetMood(ctx, id, m.ID, o.I)
+		if errors.Is(err, ErrNotFound) {
+			fail(w, http.StatusConflict, closed)
+			return
+		}
+		if err != nil {
+			s.dbFail(w, r, err)
+			return
+		}
+		mood, err := s.sendMood(ctx, x, m.ID, true)
+		if err != nil {
+			s.dbFail(w, r, err)
+			return
+		}
+		writeJSON(w, map[string]any{"mood": mood})
+		return
 
 	case "cols":
 		n, err := s.repo.BoardCardCount(ctx, id)
