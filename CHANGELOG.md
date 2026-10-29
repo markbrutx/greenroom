@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 - Warm-up and Happiness fold away with a click on their heading; a folded
   block keeps a one-line summary. The choice is remembered per room in the
